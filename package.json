@@ -1,14 +1,14 @@
 {
-  "name": "zotero-plugin-template",
+  "name": "zotero-ragflow",
   "type": "module",
-  "version": "3.0.4",
-  "description": "Zotero Plugin Template",
+  "version": "0.1.0",
+  "description": "连接 Zotero 和 RAGFlow，用于构建知识库并进行知识问答",
   "config": {
-    "addonName": "Zotero Plugin Template",
-    "addonID": "addontemplate@euclpts.com",
-    "addonRef": "addontemplate",
-    "addonInstance": "AddonTemplate",
-    "prefsPrefix": "extensions.zotero.addontemplate"
+    "addonName": "Zotero RAGFlow",
+    "addonID": "zoteroragflow@yourname.com",
+    "addonRef": "zoteroragflow",
+    "addonInstance": "ZoteroRAGFlow",
+    "prefsPrefix": "extensions.zotero.zoteroragflow"
   },
   "repository": {
     "type": "git",
