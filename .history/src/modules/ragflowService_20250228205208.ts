@@ -20,7 +20,7 @@ interface DatasetResponse {
   embedding_model: string;
   chunk_method: string;
   parser_config: {
-    chunk_token_count?: number;
+    chunk_token_num?: number;
     delimiter?: string;
     layout_recognize?: boolean;
     html4excel?: boolean;
@@ -30,11 +30,12 @@ interface DatasetResponse {
     entity_types?: string[];
     task_page_size?: number;
   };
+  // 其他可能的字段
 }
 
 // 文档列表响应接口
 interface DocumentListResponse {
-  items: Array<{
+  docs: Array<{
     id: string;
     name: string;
     location: string;
@@ -43,13 +44,14 @@ interface DocumentListResponse {
     chunk_count: number;
     size: number;
     type: string;
+    // 其他可能的字段
   }>;
   total: number;
 }
 
 // 检索响应接口
 interface RetrievalResponse {
-  items: Array<{
+  chunks: Array<{
     id: string;
     content: string;
     document_id: string;
@@ -58,6 +60,7 @@ interface RetrievalResponse {
     similarity: number;
     term_similarity: number;
     vector_similarity: number;
+    // 其他可能的字段
   }>;
   doc_aggs: Array<{
     doc_id: string;
@@ -88,8 +91,15 @@ interface ChatCompletionResponse {
   };
 }
 
+// 知识库状态响应接口
+interface DatasetStatusResponse {
+  processed: number;
+  total: number;
+  finished: boolean;
+}
+
 export class RAGFlowService {
-  private static baseURL = "http://127.0.0.1:8000"; // 更改为实际 RAGFlow API 地址
+  private static baseURL = "http://127.0.0.1"; // 更改为实际 RAGFlow API 地址
   private static apiKey = "ragflow-ZkZjFlZmIwZjVhNjExZWZhNDNmMDI0Mm"; // RAGFlow API 密钥
   
   /**
@@ -134,8 +144,7 @@ export class RAGFlowService {
         })
       });
       
-      // 使用双类型断言
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse<DatasetResponse>;
+      const result = await response.json() as RAGFlowAPIResponse<DatasetResponse>;
       
       if (result.code !== 0) {
         throw new Error(result.message || "创建知识库失败");
@@ -183,7 +192,7 @@ export class RAGFlowService {
           body: formData
         });
         
-        const result = (await response.json() as unknown) as RAGFlowAPIResponse;
+        const result = await response.json() as RAGFlowAPIResponse<any>;
         
         if (result.code !== 0) {
           throw new Error(result.message || `上传文件 ${file.name} 失败`);
@@ -221,13 +230,13 @@ export class RAGFlowService {
         }
       );
       
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse<DocumentListResponse>;
+      const result = await response.json() as RAGFlowAPIResponse<DocumentListResponse>;
       
       if (result.code !== 0) {
         throw new Error(result.message || "获取文档列表失败");
       }
       
-      return result.data.items.map(doc => doc.id);
+      return result.data.docs.map((doc) => doc.id);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("获取文档列表失败:", errorMessage);
@@ -251,7 +260,7 @@ export class RAGFlowService {
         })
       });
       
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse;
+      const result = await response.json() as RAGFlowAPIResponse<any>;
       
       if (result.code !== 0) {
         throw new Error(result.message || "解析文档失败");
@@ -281,7 +290,7 @@ export class RAGFlowService {
         }
       });
       
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse<DatasetResponse>;
+      const result = await response.json() as RAGFlowAPIResponse<DatasetResponse>;
       
       if (result.code !== 0) {
         throw new Error(result.message || "获取数据集状态失败");
@@ -323,19 +332,19 @@ export class RAGFlowService {
         })
       });
       
-      const retrievalResult = (await retrievalResponse.json() as unknown) as RAGFlowAPIResponse<RetrievalResponse>;
+      const retrievalResult = await retrievalResponse.json() as RAGFlowAPIResponse<RetrievalResponse>;
       
       if (retrievalResult.code !== 0) {
         throw new Error(retrievalResult.message || "检索失败");
       }
       
       // 检索结果为空，则返回提示信息
-      if (retrievalResult.data.items.length === 0) {
+      if (retrievalResult.data.chunks.length === 0) {
         return "抱歉，我在知识库中找不到相关信息来回答这个问题。";
       }
       
       // 构建上下文
-      const contexts = retrievalResult.data.items.map(item => item.content).join("\n\n");
+      const contexts = retrievalResult.data.chunks.map((item) => item.content).join("\n\n");
       
       // 创建聊天完成（chat completion）请求
       const chatId = datasetId; // 使用数据集ID作为聊天ID
@@ -361,7 +370,7 @@ export class RAGFlowService {
         })
       });
       
-      const chatResult = (await chatResponse.json() as unknown) as ChatCompletionResponse;
+      const chatResult = await chatResponse.json() as ChatCompletionResponse;
       
       if (chatResult.choices && chatResult.choices.length > 0) {
         return chatResult.choices[0].message.content;
@@ -387,13 +396,13 @@ export class RAGFlowService {
         }
       });
       
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse<{items: DatasetResponse[]}>;
+      const result = await response.json() as RAGFlowAPIResponse<{items: DatasetResponse[]}>;
       
       if (result.code !== 0) {
         throw new Error(result.message || "获取数据集列表失败");
       }
       
-      return result.data.items.map(dataset => ({
+      return result.data.items.map((dataset) => ({
         id: dataset.id,
         name: dataset.name
       }));
@@ -424,7 +433,7 @@ export class RAGFlowService {
           }
         });
         
-        const result = (await response.json() as unknown) as RAGFlowAPIResponse<DatasetResponse>;
+        const result = await response.json() as RAGFlowAPIResponse<DatasetResponse>;
         
         if (result.code !== 0) {
           throw new Error(result.message || "获取数据集信息失败");
@@ -441,6 +450,22 @@ export class RAGFlowService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("获取知识库状态失败:", errorMessage);
       throw error;
+    }
+  }
+
+  /**
+   * 猜测文件MIME类型
+   */
+  private static guessMimeType(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt': return 'text/plain';
+      case 'json': return 'application/json';
+      case 'csv': return 'text/csv';
+      default: return 'application/octet-stream';
     }
   }
 }

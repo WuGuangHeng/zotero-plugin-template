@@ -321,10 +321,9 @@ class Addon {
       
       // 显示回答窗口
       RAGFlowUI.createQuestionDialog(question, answer);
-    } catch (error: unknown) {
+    } catch (error) {
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `获取回答失败: ${errorMessage}` });
+      progressWindow.createLine({ text: `获取回答失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }

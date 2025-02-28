@@ -15,12 +15,6 @@ export class RAGFlowUI {
     // 使用DOM方法创建顶部菜单
     const menubar = Zotero.getMainWindow().document.getElementById("main-menubar");
     
-    // 添加 null 检查
-    if (!menubar) {
-      ztoolkit.log("Error: Main menubar not found", "error");
-      return;
-    }
-    
     // 使用正确的 createElement 语法
     const ragflowMenu = ztoolkit.UI.createElement(
       Zotero.getMainWindow().document, 

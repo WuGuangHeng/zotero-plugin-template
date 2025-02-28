@@ -8,13 +8,13 @@ import {
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
-// import { ztoolkit } from "./utils/ztoolkit";
+import { ztoolkit } from "./utils/ztoolkit";
 import { config } from "../package.json";
 
 async function onStartup() {
   // 初始化插件
   addon.data.env = __env__;
-  ztoolkit.log(`${config.addonName} startup`, config.addonName);
+  ztoolkit.Tool.log(`${config.addonName} startup`, config.addonName);
 
   await Promise.all([
     Zotero.initializationPromise,
@@ -103,7 +103,7 @@ async function onMainWindowUnload(win: Window): Promise<void> {
 
 async function onShutdown(): Promise<void> {
   // 释放资源，取消事件监听器等
-  ztoolkit.log(`${config.addonName} shutdown`, config.addonName);
+  ztoolkit.Tool.log(`${config.addonName} shutdown`, config.addonName);
   // 注销所有UI元素以避免内存泄漏
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();

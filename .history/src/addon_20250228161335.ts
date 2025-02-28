@@ -3,6 +3,7 @@ import { ColumnOptions, DialogHelper } from "zotero-plugin-toolkit";
 import hooks from "./hooks";
 import { createZToolkit } from "./utils/ztoolkit";
 import { getString } from "./utils/locale";
+// import { ztoolkit } from "./utils/ztoolkit";
 import { RAGFlowUI } from "./modules/ragflowUI";
 import { RAGFlowService } from "./modules/ragflowService";
 
@@ -73,16 +74,15 @@ class Addon {
    * 打开设置对话框
    */
   public openSettings() {
-    // 不需要调用 dialog.open()，因为 createSettingsUI 内部已经调用了
-    RAGFlowUI.createSettingsUI();
+    const dialog = RAGFlowUI.createSettingsUI();
+    dialog.open();
   }
   
   public async openCollectionSelector() {
     // 首先检查是否配置了API密钥
     const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`) as string;
     if (!apiKey) {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 提示");
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 提示");
       progressWindow.createLine({ 
         text: "请先在设置中配置 RAGFlow API 密钥" 
       });
@@ -97,8 +97,7 @@ class Addon {
     // 获取当前选中的集合
     const collection = Zotero.getActiveZoteroPane().getSelectedCollection();
     if (!collection) {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 错误");
       progressWindow.createLine({ text: "请先选择一个集合" });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
@@ -115,10 +114,10 @@ class Addon {
     }
   }
   
-  public async uploadCollectionToRAGFlow(collection: Zotero.Collection) {
+  public async uploadCollectionToRAGFlow(collection) {
     try {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow(
+      // 显示进度窗口
+      const progressWindow = ztoolkit.ProgressWindow.create(
         "RAGFlow 上传",
         { closeOnClick: false }
       );
@@ -168,11 +167,9 @@ class Addon {
       
       // 开始定期检查知识库状态
       this.checkKnowledgeBaseStatus(kbId, progressWindow);
-    } catch (error: unknown) {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `上传失败: ${errorMessage}` });
+    } catch (error) {
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 错误");
+      progressWindow.createLine({ text: `上传失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }
@@ -199,9 +196,8 @@ class Addon {
         progressWindow.createLine({ text: `⚠️ 未知状态: ${status}` });
         progressWindow.startCloseTimer(5000);
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `检查知识库状态失败: ${errorMessage}` });
+    } catch (error) {
+      progressWindow.createLine({ text: `检查知识库状态失败: ${error.message}` });
       progressWindow.startCloseTimer(3000);
     }
   }
@@ -226,8 +222,7 @@ class Addon {
     // 首先检查是否配置了API密钥
     const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`) as string;
     if (!apiKey) {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 提示");
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 提示");
       progressWindow.createLine({ 
         text: "请先在设置中配置 RAGFlow API 密钥" 
       });
@@ -240,8 +235,7 @@ class Addon {
     }
     
     if (!this.data.kbId) {
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 错误");
       progressWindow.createLine({ 
         text: "尚未创建知识库，请先选择集合并上传到 RAGFlow" 
       });
@@ -250,46 +244,32 @@ class Addon {
       return;
     }
     
-    // 修改: 使用正确的 Dialog 创建方式
-    const dialogWindow = new ztoolkit.Dialog(2, 1)
-      .addCell(0, 0, {
-        tag: "h3",
-        properties: { innerHTML: "请输入您的问题：" },
-        styles: { marginBottom: "10px" }
-      })
-      .addCell(1, 0, {
-        tag: "textarea",
-        namespace: "html",
-        id: "question-input",
-        attributes: { 
-          "data-bind": "question",
-          "data-prop": "value",
-          rows: "5"
-        },
-        styles: { 
-          width: "100%", 
-          minHeight: "100px", 
-          padding: "10px", 
-          marginBottom: "20px" 
-        }
-      })
-      .addButton("提问", "ask")
-      .addButton("取消", "cancel")
-      .setDialogData({
-        question: "",
-        onUnload: (dialogData: any) => {
-          if (dialogData._lastButtonId === "ask" && dialogData.question.trim()) {
-            this.processQuestion(dialogData.question.trim());
+    // 创建问答对话框（使用更友好的输入框）
+    const promptDialog = ztoolkit.Dialog.create({
+      id: "ragflow-question-prompt",
+      title: "RAGFlow 问答",
+      buttons: ["accept", "cancel"],
+      buttonCallbacks: {
+        accept: (dialog) => {
+          const doc = dialog.window.document;
+          const questionInput = doc.getElementById("question-input") as HTMLTextAreaElement;
+          const question = questionInput.value.trim();
+          
+          if (question) {
+            this.processQuestion(question);
           }
         }
-      });
-      
-    dialogWindow.open("RAGFlow 问答", {
-      width: 500,
-      height: 250,
-      centerscreen: true,
-      resizable: true
+      },
+      html: `
+        <div style="display: flex; flex-direction: column; padding: 20px; min-width: 500px;">
+          <h3 style="margin-bottom: 10px;">请输入您的问题：</h3>
+          <textarea id="question-input" style="width: 100%; min-height: 100px; padding: 10px; margin-bottom: 20px;"></textarea>
+          <p style="color: #666;">问题将基于您上传的知识库内容进行回答</p>
+        </div>
+      `
     });
+    
+    promptDialog.open();
   }
   
   /**
@@ -297,34 +277,21 @@ class Addon {
    */
   private async processQuestion(question: string) {
     try {
-      // 检查 kbId 是否存在
-      if (!this.data.kbId) {
-        const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ text: "知识库ID不存在，请重新上传集合" });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
-      // 修改: 使用正确的 ProgressWindow 创建方式
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 问答");
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 问答");
       progressWindow.createLine({ text: "正在获取回答..." });
       progressWindow.show();
       
-      // 由于前面已经检查了 kbId 不为空，这里可以使用非空断言或类型断言
-      const answer = await RAGFlowService.askQuestion(this.data.kbId as string, question);
-      // 或者使用非空断言: 
-      // const answer = await RAGFlowService.askQuestion(this.data.kbId!, question);
+      const answer = await RAGFlowService.askQuestion(this.data.kbId, question);
       
       // 关闭进度窗口
       progressWindow.close();
       
       // 显示回答窗口
-      RAGFlowUI.createQuestionDialog(question, answer);
-    } catch (error: unknown) {
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `获取回答失败: ${errorMessage}` });
+      const dialog = RAGFlowUI.createQuestionDialog(question, answer);
+      dialog.open();
+    } catch (error) {
+      const progressWindow = ztoolkit.ProgressWindow.create("RAGFlow 错误");
+      progressWindow.createLine({ text: `获取回答失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }

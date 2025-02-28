@@ -115,7 +115,7 @@ class Addon {
     }
   }
   
-  public async uploadCollectionToRAGFlow(collection: Zotero.Collection) {
+  public async uploadCollectionToRAGFlow(collection) {
     try {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow(
@@ -168,11 +168,10 @@ class Addon {
       
       // 开始定期检查知识库状态
       this.checkKnowledgeBaseStatus(kbId, progressWindow);
-    } catch (error: unknown) {
+    } catch (error) {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `上传失败: ${errorMessage}` });
+      progressWindow.createLine({ text: `上传失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }
@@ -199,9 +198,8 @@ class Addon {
         progressWindow.createLine({ text: `⚠️ 未知状态: ${status}` });
         progressWindow.startCloseTimer(5000);
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `检查知识库状态失败: ${errorMessage}` });
+    } catch (error) {
+      progressWindow.createLine({ text: `检查知识库状态失败: ${error.message}` });
       progressWindow.startCloseTimer(3000);
     }
   }
@@ -297,34 +295,23 @@ class Addon {
    */
   private async processQuestion(question: string) {
     try {
-      // 检查 kbId 是否存在
-      if (!this.data.kbId) {
-        const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ text: "知识库ID不存在，请重新上传集合" });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 问答");
       progressWindow.createLine({ text: "正在获取回答..." });
       progressWindow.show();
       
-      // 由于前面已经检查了 kbId 不为空，这里可以使用非空断言或类型断言
-      const answer = await RAGFlowService.askQuestion(this.data.kbId as string, question);
-      // 或者使用非空断言: 
-      // const answer = await RAGFlowService.askQuestion(this.data.kbId!, question);
+      const answer = await RAGFlowService.askQuestion(this.data.kbId, question);
       
       // 关闭进度窗口
       progressWindow.close();
       
       // 显示回答窗口
+      // 不需要调用 dialog.open()，因为 createQuestionDialog 内部已经调用了
       RAGFlowUI.createQuestionDialog(question, answer);
-    } catch (error: unknown) {
+    } catch (error) {
+      // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `获取回答失败: ${errorMessage}` });
+      progressWindow.createLine({ text: `获取回答失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }

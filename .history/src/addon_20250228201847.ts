@@ -115,7 +115,7 @@ class Addon {
     }
   }
   
-  public async uploadCollectionToRAGFlow(collection: Zotero.Collection) {
+  public async uploadCollectionToRAGFlow(collection) {
     try {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow(
@@ -168,11 +168,10 @@ class Addon {
       
       // 开始定期检查知识库状态
       this.checkKnowledgeBaseStatus(kbId, progressWindow);
-    } catch (error: unknown) {
+    } catch (error) {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `上传失败: ${errorMessage}` });
+      progressWindow.createLine({ text: `上传失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }
@@ -199,9 +198,8 @@ class Addon {
         progressWindow.createLine({ text: `⚠️ 未知状态: ${status}` });
         progressWindow.startCloseTimer(5000);
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `检查知识库状态失败: ${errorMessage}` });
+    } catch (error) {
+      progressWindow.createLine({ text: `检查知识库状态失败: ${error.message}` });
       progressWindow.startCloseTimer(3000);
     }
   }
@@ -321,10 +319,9 @@ class Addon {
       
       // 显示回答窗口
       RAGFlowUI.createQuestionDialog(question, answer);
-    } catch (error: unknown) {
+    } catch (error) {
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      progressWindow.createLine({ text: `获取回答失败: ${errorMessage}` });
+      progressWindow.createLine({ text: `获取回答失败: ${error.message}` });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
     }

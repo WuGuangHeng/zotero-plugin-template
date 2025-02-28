@@ -15,12 +15,6 @@ export class RAGFlowUI {
     // 使用DOM方法创建顶部菜单
     const menubar = Zotero.getMainWindow().document.getElementById("main-menubar");
     
-    // 添加 null 检查
-    if (!menubar) {
-      ztoolkit.log("Error: Main menubar not found", "error");
-      return;
-    }
-    
     // 使用正确的 createElement 语法
     const ragflowMenu = ztoolkit.UI.createElement(
       Zotero.getMainWindow().document, 
@@ -59,48 +53,6 @@ export class RAGFlowUI {
     
     const questionItem = ztoolkit.UI.createElement(
       Zotero.getMainWindow().document, 
-      "menuitem", 
-      {
-        namespace: "xul",
-        id: "zotero-ragflow-question",
-        attributes: {
-          label: "RAGFlow 知识库问答",
-          oncommand: "Zotero.ZoteroRAGFlow.openQuestionDialog()"
-        }
-      }
-    );
-    
-    const separator = ztoolkit.UI.createElement(
-      Zotero.getMainWindow().document, 
-      "menuseparator", 
-      {
-        namespace: "xul"
-      }
-    );
-    
-    const settingsItem = ztoolkit.UI.createElement(
-      Zotero.getMainWindow().document, 
-      "menuitem", 
-      {
-        namespace: "xul",
-        id: "zotero-ragflow-settings",
-        attributes: {
-          label: "设置",
-          oncommand: "Zotero.ZoteroRAGFlow.openSettings()"
-        }
-      }
-    );
-    
-    // 组装菜单
-    ragflowMenuPopup.appendChild(uploadItem);
-    ragflowMenuPopup.appendChild(questionItem);
-    ragflowMenuPopup.appendChild(separator);
-    ragflowMenuPopup.appendChild(settingsItem);
-    ragflowMenu.appendChild(ragflowMenuPopup);
-    menubar.appendChild(ragflowMenu);
-    
-    // 创建集合右键菜单项 - 使用正确的选择器 "collection"
-    ztoolkit.Menu.register("collection", {
       tag: "menuitem",
       id: "zotero-ragflow-collection-context",
       label: "发送到 RAGFlow 知识库",
@@ -192,7 +144,7 @@ export class RAGFlowUI {
         apiKey: Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`) as string || "",
         apiUrl: Zotero.Prefs.get(`${config.prefsPrefix}.apiUrl`) as string || "http://localhost:8000/api/v1",
         // 添加关闭时的回调函数
-        onUnload: (dialogData: any) => {  // 修改: unloadCallback 改为 onUnload
+        unloadCallback: (dialogData: any) => {
           if (dialogData._lastButtonId === "save") {
             // 保存设置
             Zotero.Prefs.set(`${config.prefsPrefix}.apiKey`, dialogData.apiKey);
