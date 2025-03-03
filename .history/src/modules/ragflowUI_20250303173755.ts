@@ -1,5 +1,4 @@
 // src/modules/ragflowUI.ts
-import { console } from "inspector";
 import { config } from "../../package.json";
 import { RAGFlowService } from "./ragflowService";
 
@@ -195,14 +194,10 @@ export class RAGFlowUI {
         // 添加关闭时的回调函数
         onUnload: (dialogData: any) => {  // 修改: unloadCallback 改为 onUnload
           if (dialogData._lastButtonId === "save") {
-            //保存前记录
-            Zotero.debug("保存前API Key:"+ Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`));
             // 保存设置
             Zotero.Prefs.set(`${config.prefsPrefix}.apiKey`, dialogData.apiKey);
             Zotero.Prefs.set(`${config.prefsPrefix}.apiUrl`, dialogData.apiUrl);
-            //保存后记录
-            Zotero.debug("保存后API Key:"+ Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`));
-            Zotero.debug("dialogData.apiKey:"+ dialogData.apiKey);
+            
             // 同步到服务
             addon.updateRAGFlowSettings();
           }

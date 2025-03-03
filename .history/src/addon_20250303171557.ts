@@ -52,10 +52,7 @@ class Addon {
     // 初始化 RAGFlow 服务配置
     this.updateRAGFlowSettings();
 
-    // 添加调试代码，查看设置是否正确读取
-    const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`);
-    Zotero.debug(`RAGFlow API Key: ${apiKey ? "已设置" : "未设置"}`);
-    Zotero.debug(`prefsPrefix: ${config.prefsPrefix}`);
+    
   }
   
   /**
@@ -85,7 +82,6 @@ class Addon {
   public async openCollectionSelector() {
     // 首先检查是否配置了API密钥
     const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`) as string;
-    await new Promise((resolve) => setTimeout(resolve, 100));
     if (!apiKey) {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 提示");

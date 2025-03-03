@@ -85,7 +85,6 @@ class Addon {
   public async openCollectionSelector() {
     // 首先检查是否配置了API密钥
     const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`) as string;
-    await new Promise((resolve) => setTimeout(resolve, 100));
     if (!apiKey) {
       // 修改: 使用正确的 ProgressWindow 创建方式
       const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 提示");

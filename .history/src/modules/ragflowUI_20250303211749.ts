@@ -200,9 +200,7 @@ export class RAGFlowUI {
             // 保存设置
             Zotero.Prefs.set(`${config.prefsPrefix}.apiKey`, dialogData.apiKey);
             Zotero.Prefs.set(`${config.prefsPrefix}.apiUrl`, dialogData.apiUrl);
-            //保存后记录
-            Zotero.debug("保存后API Key:"+ Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`));
-            Zotero.debug("dialogData.apiKey:"+ dialogData.apiKey);
+            
             // 同步到服务
             addon.updateRAGFlowSettings();
           }
