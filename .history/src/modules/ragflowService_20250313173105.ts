@@ -694,9 +694,6 @@ public static async createDataset(name: string): Promise<string> {
     try {
       Logger.info(`更新聊天助手，ID: ${chatId}, 名称: ${name}`);
       
-      // check params
-      Logger.debug(`更新聊天助手参数: ${JSON.stringify(params, null, 2)}`);
-      
       // 获取现有聊天助手的详细信息
       const existingAssistant = await this.getChatAssistantDetails(chatId);
       

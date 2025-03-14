@@ -1,7 +1,4 @@
 // src/modules/ragflowService.ts
-// 在文件顶部添加导入
-import { Logger } from "./logger";
-
 
 // 定义API响应的接口
 interface RAGFlowAPIResponse<T = any> {
@@ -36,6 +33,7 @@ interface DatasetResponse {
 }
 
 // 文档列表响应接口
+// 文档列表响应接口
 interface DocumentListResponse {
   docs: Array<{
     id: string;
@@ -59,9 +57,9 @@ interface DocumentListResponse {
   total: number;
 }
 
-// 修改 RetrievalResponse 接口定义
+// 检索响应接口
 interface RetrievalResponse {
-  chunks: Array<{
+  items: Array<{
     id: string;
     content: string;
     document_id: string;
@@ -98,76 +96,6 @@ interface ChatCompletionResponse {
     completion_tokens: number;
     total_tokens: number;
   };
-}
-
-// 在现有接口定义区域添加
-interface ChatAssistantResponse {
-  id: string;
-  name: string;
-  avatar?: string;
-  dataset_ids: string[];
-  create_time: number;
-  llm: {
-    model_name: string;
-    temperature: number;
-    top_p: number;
-    presence_penalty: number;
-    frequency_penalty: number;
-    max_tokens: number;
-  };
-  prompt: {
-    similarity_threshold: number;
-    keywords_similarity_weight: number;
-    top_n: number;
-    variables: Array<{key: string, optional: boolean}>;
-    empty_response: string;
-    opener: string;
-  };
-}
-
-interface SessionResponse {
-  id: string;
-  chat_id: string;
-  name: string;
-  messages: Array<{
-    role: string;
-    content: string;
-  }>;
-  create_time: number;
-  update_time: number;
-}
-
-// 更新 CompletionResponse 接口定义
-interface CompletionResponse {
-  answer: string;
-  reference?: {
-    chunks: Array<{
-      id: string;
-      content: string;
-      document_id: string;
-      document_name: string;
-      similarity: number;
-    }>;
-    doc_aggs: Array<{
-      doc_id: string;
-      doc_name: string;
-      count: number;
-    }>;
-    total: number;
-  };
-  audio_binary?: null;
-  id?: string;
-  session_id: string;
-}
-
-// 聊天助手参数接口
-export interface ChatAssistantParams {
-  model: string;
-  temperature: number;
-  top_p: number;
-  max_tokens: number;
-  similarity_threshold: number;
-  top_n: number;
 }
 
 export class RAGFlowService {
@@ -277,37 +205,13 @@ public static async createDataset(name: string): Promise<string> {
       Zotero.debug(`[RAGFlow] uploadFiles: 文件列表: ${files.map(f => f.name).join(', ')}`);
       Zotero.debug(`[RAGFlow] uploadFiles: 集合名称: ${collectionName}`);
       
-      // 过滤不支持的文件类型
-      const supportedFiles = files.filter(file => {
-        // 检查文件类型
-        const isHTML = file.mimeType === "text/html" || 
-                      file.path.toLowerCase().endsWith(".html") ||
-                      file.path.toLowerCase().endsWith(".htm");
-        
-        const isSnapshot = file.name.includes("Snapshot") || file.path.includes("Snapshot");
-        
-        if (isHTML || isSnapshot) {
-          Zotero.debug(`[RAGFlow] uploadFiles: 跳过不支持的HTML快照文件: ${file.name}`);
-          return false;
-        }
-        
-        // 其他支持的文件类型保留
-        return true;
-      });
-      
-      Zotero.debug(`[RAGFlow] uploadFiles: 过滤后剩余 ${supportedFiles.length} 个支持的文件`);
-      
-      if (supportedFiles.length === 0) {
-        throw new Error("没有找到RAGFlow支持的文件类型。目前不支持HTML快照文件。");
-      }
-      
       // 创建数据集
       Zotero.debug(`[RAGFlow] uploadFiles: 正在创建数据集...`);
       const datasetId = await this.createDataset(collectionName);
       Zotero.debug(`[RAGFlow] uploadFiles: 数据集创建成功，ID: ${datasetId}`);
       
-      // 2. 逐个上传文件 - 使用过滤后的supportedFiles
-      for (const file of supportedFiles) {
+      // 2. 逐个上传文件
+      for (const file of files) {
         Zotero.debug(`[RAGFlow] uploadFiles: 开始处理文件: ${file.name}, 路径: ${file.path}`);
         
         try {
@@ -368,13 +272,7 @@ public static async createDataset(name: string): Promise<string> {
                     Zotero.debug(`[RAGFlow] uploadFiles: 文件 ${file.name} 上传成功`);
                     resolve(response);
                   } else {
-                    // 处理API错误，如不支持的文件类型
-                    if (response.message && response.message.includes("This type of file has not been supported yet")) {
-                      Zotero.debug(`[RAGFlow] uploadFiles: 文件类型不支持: ${file.name} (${file.mimeType})`);
-                      reject(new Error(`文件类型不支持: ${file.name}`));
-                    } else {
-                      reject(new Error(response.message || `上传文件失败: API错误`));
-                    }
+                    reject(new Error(response.message || `上传文件失败: API错误`));
                   }
                 } catch (e) {
                   const errorMessage = e instanceof Error ? e.message : String(e);
@@ -396,14 +294,6 @@ public static async createDataset(name: string): Promise<string> {
           Zotero.debug(`[RAGFlow] uploadFiles: 文件 ${file.name} 上传完成`);
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          
-          // 如果是不支持的文件类型，则记录但继续处理其他文件
-          if (errorMessage.includes("文件类型不支持") || 
-              errorMessage.includes("This type of file has not been supported yet")) {
-            Zotero.debug(`[RAGFlow] uploadFiles: 跳过不支持的文件类型: ${file.name}`);
-            continue;
-          }
-          
           Zotero.debug(`[RAGFlow] uploadFiles: 上传文件时出错: ${errorMessage}`);
           if (error instanceof Error && error.stack) {
             Zotero.debug(`[RAGFlow] uploadFiles: 错误堆栈: ${error.stack}`);
@@ -416,10 +306,6 @@ public static async createDataset(name: string): Promise<string> {
       Zotero.debug(`[RAGFlow] uploadFiles: 正在获取文档ID列表...`);
       const documentIds = await this.getDocumentIds(datasetId);
       Zotero.debug(`[RAGFlow] uploadFiles: 获取到 ${documentIds.length} 个文档ID`);
-      
-      if (documentIds.length === 0) {
-        throw new Error("没有可处理的文档。所有上传的文件类型可能均不被支持。");
-      }
       
       if (documentIds.length > 0) {
         // 4. 解析文档（开始处理文档）
@@ -575,314 +461,13 @@ public static async createDataset(name: string): Promise<string> {
     }
   }
   
-  //   /**
-  //  * 创建聊天助手
-  //  * @param datasetId 知识库ID
-  //  * @param name 聊天助手名称
-  //  */
-  // public static async createChatAssistant(datasetId: string, name: string): Promise<string> {
-  //   try {
-  //     Logger.info(`创建聊天助手，知识库ID: ${datasetId}, 名称: ${name}`);
-      
-  //     const response = await fetch(`${this.baseURL}/api/v1/chats`, {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         "Authorization": `Bearer ${this.apiKey}`
-  //       },
-  //       body: JSON.stringify({
-  //         dataset_ids: [datasetId],
-  //         name: name
-  //       })
-  //     });
-      
-  //     const responseText = await response.text();
-  //     Logger.debug(`创建聊天助手API原始响应: ${responseText}`);
-      
-  //     let result;
-  //     try {
-  //       result = JSON.parse(responseText) as RAGFlowAPIResponse<ChatAssistantResponse>;
-  //     } catch (parseError) {
-  //       Logger.error(`解析创建聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-  //       throw new Error(`解析创建聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-  //     }
-      
-  //     if (result.code !== 0) {
-  //       Logger.error(`创建聊天助手失败: ${result.message}`);
-  //       throw new Error(result.message || "创建聊天助手失败");
-  //     }
-      
-  //     Logger.info(`聊天助手创建成功，ID: ${result.data.id}`);
-  //     return result.data.id;
-  //   } catch (error) {
-  //     const errorMessage = error instanceof Error ? error.message : String(error);
-  //     Logger.error(`创建聊天助手失败: ${errorMessage}`, error);
-  //     throw error;
-  //   }
-  // }
-  
   /**
-   * 创建聊天助手
-   * @param datasetId 知识库ID
-   * @param name 聊天助手名称
-   * @param params 聊天助手参数
+   * 向 RAGFlow 发送问题并获取回答（通过检索 API）
    */
-  public static async createChatAssistant(datasetId: string, name: string, params?: ChatAssistantParams): Promise<string> {
+  public static async askQuestion(datasetId: string, question: string): Promise<string> {
     try {
-      Logger.info(`创建聊天助手，知识库ID: ${datasetId}, 名称: ${name}`);
-      
-      const requestBody: any = {
-        dataset_ids: [datasetId],
-        name: name
-      };
-      
-      // 如果提供了参数，添加到请求体中
-      if (params) {
-        requestBody.llm = {
-          model_name: params.model,
-          temperature: params.temperature,
-          top_p: params.top_p,
-          max_tokens: params.max_tokens
-        };
-        
-        requestBody.prompt = {
-          similarity_threshold: params.similarity_threshold,
-          top_n: params.top_n
-        };
-      }
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      const responseText = await response.text();
-      Logger.debug(`创建聊天助手API原始响应: ${responseText}`);
-      
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<ChatAssistantResponse>;
-      } catch (parseError) {
-        Logger.error(`解析创建聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析创建聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      if (result.code !== 0) {
-        Logger.error(`创建聊天助手失败: ${result.message}`);
-        throw new Error(result.message || "创建聊天助手失败");
-      }
-      
-      Logger.info(`聊天助手创建成功，ID: ${result.data.id}`);
-      return result.data.id;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error(`创建聊天助手失败: ${errorMessage}`, error);
-      throw error;
-    }
-  }
-      /**
-   * 更新聊天助手
-   * @param chatId 聊天助手ID
-   * @param name 聊天助手名称
-   * @param params 聊天助手参数
-   */
-  public static async updateChatAssistant(chatId: string, name: string, params?: ChatAssistantParams): Promise<boolean> {
-    try {
-      Logger.info(`更新聊天助手，ID: ${chatId}, 名称: ${name}`);
-      
-      // check params
-      Logger.debug(`更新聊天助手参数: ${JSON.stringify(params, null, 2)}`);
-      
-      // 获取现有聊天助手的详细信息
-      const existingAssistant = await this.getChatAssistantDetails(chatId);
-      
-      // 构建更新请求，保留现有配置并合并新配置
-      const requestBody: any = {
-        name: name
-      };
-      
-      // 如果提供了参数，添加到请求体中
-      if (params) {
-        // 使用现有助手的 llm 信息作为基础
-        requestBody.llm = {
-          model_name: params.model || existingAssistant.llm?.model_name || "deepseek-chat",
-          temperature: params.temperature,
-          top_p: params.top_p,
-          max_tokens: params.max_tokens
-        };
-        
-        // 添加现有助手中可能存在的其他 llm 参数
-        if (existingAssistant.llm) {
-          if (existingAssistant.llm.presence_penalty !== undefined) {
-            requestBody.llm.presence_penalty = existingAssistant.llm.presence_penalty;
-          }
-          if (existingAssistant.llm.frequency_penalty !== undefined) {
-            requestBody.llm.frequency_penalty = existingAssistant.llm.frequency_penalty;
-          }
-        }
-        
-        // 使用现有助手的 prompt 信息作为基础
-        requestBody.prompt = {
-          similarity_threshold: params.similarity_threshold,
-          top_n: params.top_n
-        };
-        
-        // 添加现有助手中可能存在的其他 prompt 参数
-        if (existingAssistant.prompt) {
-          if (existingAssistant.prompt.keywords_similarity_weight !== undefined) {
-            requestBody.prompt.keywords_similarity_weight = existingAssistant.prompt.keywords_similarity_weight;
-          }
-          if (existingAssistant.prompt.variables) {
-            requestBody.prompt.variables = existingAssistant.prompt.variables;
-          }
-          if (existingAssistant.prompt.empty_response) {
-            requestBody.prompt.empty_response = existingAssistant.prompt.empty_response;
-          }
-          if (existingAssistant.prompt.opener) {
-            requestBody.prompt.opener = existingAssistant.prompt.opener;
-          }
-        }
-      }
-      
-      Logger.debug(`更新聊天助手请求体: ${JSON.stringify(requestBody, null, 2)}`);
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats/${chatId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      const responseText = await response.text();
-      Logger.debug(`更新聊天助手API原始响应: ${responseText}`);
-      
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<any>;
-      } catch (parseError) {
-        Logger.error(`解析更新聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析更新聊天助手API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      if (result.code !== 0) {
-        Logger.error(`更新聊天助手失败: ${result.message}`);
-        throw new Error(result.message || "更新聊天助手失败");
-      }
-      
-      Logger.info(`聊天助手更新成功，ID: ${chatId}`);
-      return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error(`更新聊天助手失败: ${errorMessage}`, error);
-      throw error;
-    }
-  }
-
-    /**
-   * 获取聊天助手详情
-   * @param chatId 聊天助手ID
-   */
-  public static async getChatAssistantDetails(chatId: string): Promise<ChatAssistantResponse> {
-    try {
-      Logger.info(`获取聊天助手详情，ID: ${chatId}`);
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats?id=${chatId}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`
-        }
-      });
-      
-      const responseText = await response.text();
-      Logger.debug(`获取聊天助手详情API原始响应: ${responseText}`);
-      
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<ChatAssistantResponse[]>;
-      } catch (parseError) {
-        Logger.error(`解析获取聊天助手详情API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析获取聊天助手详情API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      if (result.code !== 0) {
-        Logger.error(`获取聊天助手详情失败: ${result.message}`);
-        throw new Error(result.message || "获取聊天助手详情失败");
-      }
-      
-      if (!result.data || result.data.length === 0) {
-        throw new Error("找不到指定的聊天助手");
-      }
-      
-      return result.data[0];
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error(`获取聊天助手详情失败: ${errorMessage}`, error);
-      throw error;
-    }
-  }
-
-    /**
-   * 创建聊天会话
-   * @param chatId 聊天助手ID
-   * @param name 会话名称
-   */
-  public static async createSession(chatId: string, name: string = "Zotero问答会话"): Promise<string> {
-    try {
-      Logger.info(`创建会话，聊天助手ID: ${chatId}, 名称: ${name}`);
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats/${chatId}/sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          name: name
-        })
-      });
-      
-      const responseText = await response.text();
-      Logger.debug(`创建会话API原始响应: ${responseText}`);
-      
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<SessionResponse>;
-      } catch (parseError) {
-        Logger.error(`解析创建会话API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析创建会话API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      if (result.code !== 0) {
-        Logger.error(`创建会话失败: ${result.message}`);
-        throw new Error(result.message || "创建会话失败");
-      }
-      
-      Logger.info(`会话创建成功，ID: ${result.data.id}`);
-      return result.data.id;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error(`创建会话失败: ${errorMessage}`, error);
-      throw error;
-    }
-  }
-
-  /**
- * 向 RAGFlow 发送问题并获取回答（通过聊天完成 API）
- * @param chatId 聊天助手ID
- * @param sessionId 会话ID
- * @param question 问题
- */
-  public static async askQuestion(chatId: string, sessionId: string, question: string): Promise<{answer: string, sources: Array<{content: string, document_name: string}>}> {
-    try {
-      Logger.info(`向聊天助手 ${chatId} 的会话 ${sessionId} 发送问题: ${question}`);
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats/${chatId}/completions`, {
+      // 首先进行检索
+      const retrievalResponse = await fetch(`${this.baseURL}/api/v1/retrieval`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -890,96 +475,72 @@ public static async createDataset(name: string): Promise<string> {
         },
         body: JSON.stringify({
           question: question,
-          session_id: sessionId,
-          stream: false
+          dataset_ids: [datasetId],
+          page: 1,
+          page_size: 5,
+          similarity_threshold: 0.2,
+          vector_similarity_weight: 0.7,
+          highlight: true
         })
       });
       
-      const responseText = await response.text();
-      Logger.debug(`聊天API原始响应: ${responseText}`);
+      const retrievalResult = (await retrievalResponse.json() as unknown) as RAGFlowAPIResponse<RetrievalResponse>;
       
-      // 检查余额不足错误 (直接检查原始响应文本)
-      if (responseText.includes("Insufficient Balance") || responseText.includes("402")) {
-        Logger.error("RAGFlow API 账户余额不足");
-        throw new Error("RAGFlow API 账户余额不足，请充值后再试");
+      if (retrievalResult.code !== 0) {
+        throw new Error(retrievalResult.message || "检索失败");
       }
       
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<CompletionResponse>;
-      } catch (parseError) {
-        Logger.error(`解析聊天API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析聊天API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      // 检索结果为空，则返回提示信息
+      if (retrievalResult.data.items.length === 0) {
+        return "抱歉，我在知识库中找不到相关信息来回答这个问题。";
       }
       
-      // 检查API返回的错误码
-      if (result.code !== 0) {
-        // 特别处理余额不足的情况
-        if (result.code === 402 || 
-            (result.message && (result.message.includes("Insufficient Balance") || 
-                              result.message.includes("余额不足")))) {
-          Logger.error("RAGFlow API 账户余额不足", result);
-          throw new Error("RAGFlow API 账户余额不足，请充值后再试");
-        }
-        
-        Logger.error(`聊天API返回错误: ${result.message}`, result);
-        throw new Error(result.message || "获取回答失败");
-      }
+      // 构建上下文
+      const contexts = retrievalResult.data.items.map(item => item.content).join("\n\n");
       
-      // 打印响应结构，帮助调试
-      Logger.debug(`聊天API响应结构: ${JSON.stringify({
-        hasData: !!result.data,
-        dataKeys: result.data ? Object.keys(result.data) : [],
-        hasAnswer: result.data?.answer != null
-      })}`);
+      // 创建聊天完成（chat completion）请求
+      const chatId = datasetId; // 使用数据集ID作为聊天ID
+      const chatResponse = await fetch(`${this.baseURL}/api/v1/chats_openai/${chatId}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo", // 使用支持的模型
+          stream: false,
+          messages: [
+            {
+              role: "system",
+              content: "您是一个基于知识库的问答助手。您只能根据提供的上下文回答问题，不要编造信息。如果上下文中没有相关信息，请坦诚告知用户。"
+            },
+            {
+              role: "user",
+              content: `基于以下上下文回答问题：\n\n${contexts}\n\n问题：${question}`
+            }
+          ]
+        })
+      });
       
-      if (!result.data || !result.data.answer) {
-        Logger.error("获取回答失败，返回数据格式不正确", result);
+      const chatResult = (await chatResponse.json() as unknown) as ChatCompletionResponse;
+      
+      if (chatResult.choices && chatResult.choices.length > 0) {
+        return chatResult.choices[0].message.content;
+      } else {
         throw new Error("获取回答失败，返回数据格式不正确");
       }
-      
-      const answer = result.data.answer;
-      
-      // 准备来源信息
-      const sources: Array<{content: string, document_name: string}> = [];
-      
-      if (result.data.reference && result.data.reference.chunks) {
-        result.data.reference.chunks.forEach(chunk => {
-          sources.push({
-            content: chunk.content,
-            document_name: chunk.document_name || "未知文档"
-          });
-        });
-      }
-      
-      Logger.info(`成功获取到回答，长度: ${answer.length} 字符`);
-      return {
-        answer,
-        sources
-      };
-    } catch (error) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // 再次检查错误消息中是否包含余额不足信息
-      if (errorMessage.includes("402") || 
-          errorMessage.includes("Insufficient Balance") || 
-          errorMessage.includes("余额不足")) {
-        Logger.error("RAGFlow API 账户余额不足", error);
-        throw new Error("RAGFlow API 账户余额不足，请登录 RAGFlow 平台充值后再试");
-      }
-      
-      Logger.error(`获取回答失败: ${errorMessage}`, error);
+      console.error("获取回答失败:", errorMessage);
       throw error;
     }
   }
   
   /**
- * 获取知识库列表
- */
+   * 获取数据集列表
+   */
   public static async listDatasets(): Promise<Array<{id: string, name: string}>> {
     try {
-      Logger.info("开始获取知识库列表");
-      
       const response = await fetch(`${this.baseURL}/api/v1/datasets?page=1&page_size=100`, {
         method: "GET",
         headers: {
@@ -987,21 +548,19 @@ public static async createDataset(name: string): Promise<string> {
         }
       });
       
-      const result = (await response.json() as unknown) as RAGFlowAPIResponse<DatasetResponse[]>;
+      const result = (await response.json() as unknown) as RAGFlowAPIResponse<{items: DatasetResponse[]}>;
       
       if (result.code !== 0) {
-        Logger.error(`获取知识库列表API返回错误: ${result.message}`);
         throw new Error(result.message || "获取数据集列表失败");
       }
       
-      Logger.info(`成功获取到 ${result.data.length} 个知识库`);
-      return result.data.map(dataset => ({
+      return result.data.items.map(dataset => ({
         id: dataset.id,
         name: dataset.name
       }));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error("获取知识库列表失败", error);
+      console.error("获取数据集列表失败:", errorMessage);
       throw error;
     }
   }

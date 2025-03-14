@@ -1238,9 +1238,6 @@ export class RAGFlowUI {
       top_n: 5
     };
     
-    // 创建一个独立的变量来存储当前选择的模型
-    let currentModelValue = defaultSettings.model;
-    
     // 初始化对话框
     const dialog = new ztoolkit.Dialog(8, 2);
     
@@ -1273,7 +1270,7 @@ export class RAGFlowUI {
       }
     });
     
-    // 模型选择 - 使用独特的ID以便于精确定位
+    // 模型选择
     dialog.addCell(2, 0, {
       tag: "label",
       properties: { textContent: "模型" },
@@ -1288,7 +1285,7 @@ export class RAGFlowUI {
     dialog.addCell(2, 1, {
       tag: "select",
       namespace: "html",
-      id: "model-selector", // 更改ID，避免与其他元素冲突
+      id: "model",
       styles: {
         width: "100%", 
         padding: "6px",
@@ -1473,15 +1470,15 @@ export class RAGFlowUI {
     
     // 设置对话框数据和回调函数
     dialog.setDialogData({
+      // 直接在dialogData中存储表单值
       formValues: { ...defaultSettings },
-      selectedModel: defaultSettings.model, // 专门存储模型值
       
-      // 加载回调 - 当对话框元素创建完成后执行
+      // 加载回调
       loadCallback: async () => {
         // 设置表单元素初始值的函数
         const setFormValues = (settings: ChatSettings) => {
           const elements = {
-            model: dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null,
+            model: dialog.window.document.getElementById("model") as HTMLSelectElement | null,
             temperature: dialog.window.document.getElementById("temperature") as HTMLInputElement | null,
             top_p: dialog.window.document.getElementById("top_p") as HTMLInputElement | null,
             max_tokens: dialog.window.document.getElementById("max_tokens") as HTMLInputElement | null,
@@ -1490,12 +1487,7 @@ export class RAGFlowUI {
           };
           
           // 更新DOM元素的值
-          if (elements.model) {
-            elements.model.value = settings.model;
-            // 同步更新当前模型值
-            currentModelValue = settings.model;
-          }
-          
+          if (elements.model) elements.model.value = settings.model;
           if (elements.temperature) elements.temperature.value = settings.temperature.toString();
           if (elements.top_p) elements.top_p.value = settings.top_p.toString();
           if (elements.max_tokens) elements.max_tokens.value = settings.max_tokens.toString();
@@ -1504,34 +1496,19 @@ export class RAGFlowUI {
           
           // 更新存储的表单值
           dialog.dialogData.formValues = { ...settings };
-          dialog.dialogData.selectedModel = settings.model;
         };
         
         // 设置默认值
         setFormValues(defaultSettings);
         
-        // 为模型选择器添加多种事件处理器，确保任何变更都能被捕获
-        const modelElement = dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null;
+        // 添加模型下拉框的事件监听器 - 特别处理以确保模型选择能正常工作
+        const modelElement = dialog.window.document.getElementById("model") as HTMLSelectElement | null;
         if (modelElement) {
-          // 监听常见的表单事件
-          ["change", "input", "click", "mouseup"].forEach(eventType => {
-            modelElement.addEventListener(eventType, () => {
-              const selectedModel = modelElement.value;
-              // 多处存储模型值，确保值能被正确获取
-              currentModelValue = selectedModel;
-              dialog.dialogData.selectedModel = selectedModel;
-              dialog.dialogData.formValues.model = selectedModel;
-              Logger.debug(`模型已更改为(${eventType}事件): ${selectedModel}`);
-            });
-          });
-          
-          // 额外添加一个焦点离开事件，防止其他交互方式被遗漏
-          modelElement.addEventListener("blur", () => {
+          modelElement.addEventListener("change", () => {
+            // 更新存储的模型值
             const selectedModel = modelElement.value;
-            currentModelValue = selectedModel;
-            dialog.dialogData.selectedModel = selectedModel;
             dialog.dialogData.formValues.model = selectedModel;
-            Logger.debug(`模型已更改为(blur事件): ${selectedModel}`);
+            Logger.debug(`模型已更改为: ${selectedModel}`);
           });
         }
         
@@ -1539,17 +1516,21 @@ export class RAGFlowUI {
         const setupNumberInput = (id: string, key: keyof ChatSettings) => {
           const element = dialog.window.document.getElementById(id) as HTMLInputElement | null;
           if (element) {
-            const updateValue = () => {
+            element.addEventListener("change", () => {
               const numValue = element.value === "" ? NaN : Number(element.value);
               if (!isNaN(numValue)) {
                 dialog.dialogData.formValues[key] = numValue as any;
                 Logger.debug(`${key} 已更新为: ${numValue}`);
               }
-            };
+            });
             
-            element.addEventListener("change", updateValue);
-            element.addEventListener("input", updateValue);
-            element.addEventListener("blur", updateValue);
+            // 对于数字输入，添加input事件以实时更新
+            element.addEventListener("input", () => {
+              const numValue = element.value === "" ? NaN : Number(element.value);
+              if (!isNaN(numValue)) {
+                dialog.dialogData.formValues[key] = numValue as any;
+              }
+            });
           }
         };
         
@@ -1631,21 +1612,20 @@ export class RAGFlowUI {
           // 获取存储在dialogData中的表单值
           const formValues = dialog.dialogData.formValues;
           
-          // 在卸载前再次尝试获取模型值，这是确保能拿到最新值的关键部分
+          // 再次从DOM获取模型值作为备份方案，防止事件监听失败
           try {
-            const modelElement = dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null;
+            const modelElement = dialog.window.document.getElementById("model") as HTMLSelectElement | null;
             if (modelElement && modelElement.value) {
-              // 获取最终的模型选择值
-              const finalModelValue = modelElement.value;
-              Logger.debug(`卸载前最终模型值(DOM): ${finalModelValue}`);
-              // 更新所有存储位置
-              currentModelValue = finalModelValue;
-              dialog.dialogData.selectedModel = finalModelValue;
-              formValues.model = finalModelValue;
+              // 如果DOM元素存在且有值，使用DOM值更新（优先级高于事件监听）
+              const selectedModel = modelElement.value;
+              if (selectedModel !== formValues.model) {
+                Logger.debug(`从DOM更新模型值: ${selectedModel} (原值: ${formValues.model})`);
+                formValues.model = selectedModel;
+              }
             }
           } catch (e) {
-            Logger.debug(`从DOM获取最终模型值失败: ${e}`);
-            // 继续使用之前保存的值
+            Logger.debug(`从DOM获取模型值失败: ${e}`);
+            // 失败时继续使用已存储的值
           }
           
           // 验证并确保参数在有效范围内
@@ -1656,10 +1636,9 @@ export class RAGFlowUI {
             return value;
           };
           
-          // 构造最终参数对象，优先使用当前模型值
+          // 构造最终参数对象
           const params: ChatAssistantParams = {
-            // 多级回退机制确保总有一个有效值
-            model: currentModelValue || dialog.dialogData.selectedModel || formValues.model || defaultSettings.model,
+            model: formValues.model || defaultSettings.model,
             temperature: validateNumberParam(formValues.temperature, 0, 1, defaultSettings.temperature),
             top_p: validateNumberParam(formValues.top_p, 0, 1, defaultSettings.top_p),
             max_tokens: validateNumberParam(formValues.max_tokens, 100, 8000, defaultSettings.max_tokens),

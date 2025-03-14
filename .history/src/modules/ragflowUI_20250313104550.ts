@@ -1,18 +1,7 @@
 // src/modules/ragflowUI.ts
 import { config } from "../../package.json";
-import { RAGFlowService, ChatAssistantParams } from "./ragflowService";
+import { RAGFlowService } from "./ragflowService";
 import { Logger } from "./logger";
-
-// 添加一个类型定义来支持字符串索引
-interface ChatSettings {
-  model: string;
-  temperature: number;
-  top_p: number;
-  max_tokens: number;
-  similarity_threshold: number;
-  top_n: number;
-  [key: string]: string | number; // 允许通过字符串索引访问
-}
 
 export class RAGFlowUI {
   /**
@@ -134,21 +123,6 @@ export class RAGFlowUI {
         }
       }
     );
-
-    // 聊天助手设置菜单项
-    const chatAssistantSettingsMenu = ztoolkit.UI.createElement(
-      Zotero.getMainWindow().document, 
-      "menuitem", 
-      {
-        namespace: "xul",
-        id: "zotero-ragflow-assistant-settings",
-        attributes: {
-          label: "聊天助手设置",
-          oncommand: "Zotero.ZoteroRAGFlow.openChatAssistantSettings()"
-        }
-      }
-    );
-    ragflowMenuPopup.appendChild(chatAssistantSettingsMenu);
     
     // 组装菜单
     ragflowMenuPopup.appendChild(uploadItem);
@@ -1216,473 +1190,92 @@ export class RAGFlowUI {
     }
   }
 
-    /**
-   * 创建聊天助手参数设置对话框
-   * @param datasetId 知识库ID
-   * @param callback 回调函数，用于返回用户设置的参数
-   * @param existingChatId 可选，现有聊天助手ID，传入时表示这是一个更新操作
-   */
-  public static createChatAssistantSettingsDialog(datasetId: string, callback: (params: ChatAssistantParams) => void, existingChatId?: string): void {
-    Logger.info("创建聊天助手参数设置对话框" + (existingChatId ? "（更新模式）" : "（新建模式）"));
+  /**
+ * 创建聊天助手参数设置对话框
+ */
+  public static createChatAssistantSettingsDialog(datasetId: string, callback: (params: ChatAssistantParams) => void): void {
+    const window = Zotero.getMainWindow();
+    const document = window.document;
     
-    // 对话框标题
-    const dialogTitle = existingChatId ? "更新聊天助手设置" : "聊天助手设置";
-    
-    // 默认设置值
-    const defaultSettings: ChatSettings = {
-      model: "qwen-turbo",
-      temperature: 0.7,
-      top_p: 0.95,
-      max_tokens: 4000,
-      similarity_threshold: 0.2,
-      top_n: 5
-    };
-    
-    // 创建一个独立的变量来存储当前选择的模型
-    let currentModelValue = defaultSettings.model;
-    
-    // 初始化对话框
-    const dialog = new ztoolkit.Dialog(8, 2);
-    
-    // 添加标题
-    dialog.addCell(0, 0, {
-      tag: "h3",
-      properties: { innerHTML: dialogTitle },
-      styles: { 
-        marginBottom: "15px", 
-        color: "#2d2d2d",
-        textAlign: "center",
-        gridColumn: "1 / span 2",
-        borderBottom: "1px solid #eee",
-        paddingBottom: "10px"
+    // 创建对话框
+    const dialog = window.openDialog(
+      "chrome://zotero/content/dialog.xul",
+      "ragflow-chat-assistant-settings",
+      "chrome,centerscreen,modal",
+      {
+        title: "聊天助手设置",
+        buttons: ["确定", "取消"],
+        width: 500,
+        height: 400
       }
-    });
+    );
     
-    // 添加说明文本
-    dialog.addCell(1, 0, {
-      tag: "p",
-      properties: { 
-        innerHTML: existingChatId 
-          ? "您正在更新聊天助手的参数，这些更改将立即生效："
-          : "请配置聊天助手参数，这些参数将影响问答质量和效率："
-      },
-      styles: { 
-        marginBottom: "15px", 
-        color: "#666",
-        gridColumn: "1 / span 2"
-      }
-    });
-    
-    // 模型选择 - 使用独特的ID以便于精确定位
-    dialog.addCell(2, 0, {
-      tag: "label",
-      properties: { textContent: "模型" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(2, 1, {
-      tag: "select",
-      namespace: "html",
-      id: "model-selector", // 更改ID，避免与其他元素冲突
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      },
-      children: [
-        {
-          tag: "option",
-          namespace: "html",
-          attributes: { value: "deepseek-chat" },
-          properties: { textContent: "deepseek-chat" }
-        },
-        {
-          tag: "option",
-          namespace: "html",
-          attributes: { value: "qwen-turbo" },
-          properties: { textContent: "qwen-turbo" }
-        },
-        {
-          tag: "option",
-          namespace: "html",
-          attributes: { value: "qwen-max" },
-          properties: { textContent: "qwen-max" }
-        }
-      ]
-    });
-    
-    // 温度参数
-    dialog.addCell(3, 0, {
-      tag: "label",
-      properties: { textContent: "温度" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(3, 1, {
-      tag: "input",
-      namespace: "html",
-      id: "temperature",
-      attributes: {
-        type: "number",
-        step: "0.1",
-        min: "0",
-        max: "1"
-      },
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      }
-    });
-    
-    // Top P
-    dialog.addCell(4, 0, {
-      tag: "label",
-      properties: { textContent: "Top P" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(4, 1, {
-      tag: "input",
-      namespace: "html",
-      id: "top_p",
-      attributes: {
-        type: "number",
-        step: "0.01",
-        min: "0",
-        max: "1"
-      },
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      }
-    });
-    
-    // 最大输出长度
-    dialog.addCell(5, 0, {
-      tag: "label",
-      properties: { textContent: "最大输出长度" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(5, 1, {
-      tag: "input",
-      namespace: "html",
-      id: "max_tokens",
-      attributes: {
-        type: "number",
-        step: "100",
-        min: "100",
-        max: "8000"
-      },
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      }
-    });
-    
-    // 相似度阈值
-    dialog.addCell(6, 0, {
-      tag: "label",
-      properties: { textContent: "相似度阈值" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(6, 1, {
-      tag: "input",
-      namespace: "html",
-      id: "similarity_threshold",
-      attributes: {
-        type: "number",
-        step: "0.05",
-        min: "0",
-        max: "1"
-      },
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      }
-    });
-    
-    // 检索结果数量
-    dialog.addCell(7, 0, {
-      tag: "label",
-      properties: { textContent: "检索结果数量" },
-      styles: { 
-        fontWeight: "bold", 
-        padding: "8px 0",
-        textAlign: "right",
-        paddingRight: "15px"
-      }
-    });
-    
-    dialog.addCell(7, 1, {
-      tag: "input",
-      namespace: "html",
-      id: "top_n",
-      attributes: {
-        type: "number",
-        step: "1",
-        min: "1",
-        max: "10"
-      },
-      styles: {
-        width: "100%", 
-        padding: "6px",
-        borderRadius: "4px",
-        border: "1px solid #ccc"
-      }
-    });
-    
-    // 添加按钮
-    dialog.addButton(existingChatId ? "更新" : "确定", "save");
-    dialog.addButton("取消", "cancel");
-    
-    // 设置对话框数据和回调函数
-    dialog.setDialogData({
-      formValues: { ...defaultSettings },
-      selectedModel: defaultSettings.model, // 专门存储模型值
+    // 等待对话框加载完成
+    dialog.addEventListener("load", () => {
+      const dialogDocument = dialog.document;
+      const container = dialogDocument.querySelector("vbox");
       
-      // 加载回调 - 当对话框元素创建完成后执行
-      loadCallback: async () => {
-        // 设置表单元素初始值的函数
-        const setFormValues = (settings: ChatSettings) => {
-          const elements = {
-            model: dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null,
-            temperature: dialog.window.document.getElementById("temperature") as HTMLInputElement | null,
-            top_p: dialog.window.document.getElementById("top_p") as HTMLInputElement | null,
-            max_tokens: dialog.window.document.getElementById("max_tokens") as HTMLInputElement | null,
-            similarity_threshold: dialog.window.document.getElementById("similarity_threshold") as HTMLInputElement | null,
-            top_n: dialog.window.document.getElementById("top_n") as HTMLInputElement | null
-          };
-          
-          // 更新DOM元素的值
-          if (elements.model) {
-            elements.model.value = settings.model;
-            // 同步更新当前模型值
-            currentModelValue = settings.model;
-          }
-          
-          if (elements.temperature) elements.temperature.value = settings.temperature.toString();
-          if (elements.top_p) elements.top_p.value = settings.top_p.toString();
-          if (elements.max_tokens) elements.max_tokens.value = settings.max_tokens.toString();
-          if (elements.similarity_threshold) elements.similarity_threshold.value = settings.similarity_threshold.toString();
-          if (elements.top_n) elements.top_n.value = settings.top_n.toString();
-          
-          // 更新存储的表单值
-          dialog.dialogData.formValues = { ...settings };
-          dialog.dialogData.selectedModel = settings.model;
-        };
+      // 创建设置项
+      const settings = [
+        { id: "model", label: "模型", type: "menulist", options: ["gpt-3.5-turbo", "gpt-4", "deepseek-chat"], default: "deepseek-chat" },
+        { id: "temperature", label: "温度", type: "textbox", default: "0.7" },
+        { id: "top_p", label: "Top P", type: "textbox", default: "0.95" },
+        { id: "max_tokens", label: "最大输出长度", type: "textbox", default: "4000" },
+        { id: "similarity_threshold", label: "相似度阈值", type: "textbox", default: "0.2" },
+        { id: "top_n", label: "检索结果数量", type: "textbox", default: "5" }
+      ];
+      
+      // 添加设置项到对话框
+      settings.forEach(setting => {
+        const row = dialogDocument.createElement("hbox");
+        row.setAttribute("align", "center");
         
-        // 设置默认值
-        setFormValues(defaultSettings);
+        const label = dialogDocument.createElement("label");
+        label.setAttribute("value", setting.label);
+        label.setAttribute("width", "120");
+        row.appendChild(label);
         
-        // 为模型选择器添加多种事件处理器，确保任何变更都能被捕获
-        const modelElement = dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null;
-        if (modelElement) {
-          // 监听常见的表单事件
-          ["change", "input", "click", "mouseup"].forEach(eventType => {
-            modelElement.addEventListener(eventType, () => {
-              const selectedModel = modelElement.value;
-              // 多处存储模型值，确保值能被正确获取
-              currentModelValue = selectedModel;
-              dialog.dialogData.selectedModel = selectedModel;
-              dialog.dialogData.formValues.model = selectedModel;
-              Logger.debug(`模型已更改为(${eventType}事件): ${selectedModel}`);
-            });
+        if (setting.type === "textbox") {
+          const textbox = dialogDocument.createElement("textbox");
+          textbox.setAttribute("id", setting.id);
+          textbox.setAttribute("value", setting.default);
+          textbox.setAttribute("width", "300");
+          row.appendChild(textbox);
+        } else if (setting.type === "menulist") {
+          const menulist = dialogDocument.createElement("menulist");
+          menulist.setAttribute("id", setting.id);
+          const menupopup = dialogDocument.createElement("menupopup");
+          
+          setting.options.forEach(option => {
+            const menuitem = dialogDocument.createElement("menuitem");
+            menuitem.setAttribute("label", option);
+            menuitem.setAttribute("value", option);
+            menupopup.appendChild(menuitem);
           });
           
-          // 额外添加一个焦点离开事件，防止其他交互方式被遗漏
-          modelElement.addEventListener("blur", () => {
-            const selectedModel = modelElement.value;
-            currentModelValue = selectedModel;
-            dialog.dialogData.selectedModel = selectedModel;
-            dialog.dialogData.formValues.model = selectedModel;
-            Logger.debug(`模型已更改为(blur事件): ${selectedModel}`);
-          });
+          menulist.appendChild(menupopup);
+          menulist.value = setting.default;
+          row.appendChild(menulist);
         }
         
-        // 为其他数值输入框添加事件监听器
-        const setupNumberInput = (id: string, key: keyof ChatSettings) => {
-          const element = dialog.window.document.getElementById(id) as HTMLInputElement | null;
-          if (element) {
-            const updateValue = () => {
-              const numValue = element.value === "" ? NaN : Number(element.value);
-              if (!isNaN(numValue)) {
-                dialog.dialogData.formValues[key] = numValue as any;
-                Logger.debug(`${key} 已更新为: ${numValue}`);
-              }
-            };
-            
-            element.addEventListener("change", updateValue);
-            element.addEventListener("input", updateValue);
-            element.addEventListener("blur", updateValue);
-          }
+        container.appendChild(row);
+      });
+      
+      // 设置对话框确认回调
+      dialog.onDialogAccept = () => {
+        const params: ChatAssistantParams = {
+          model: dialogDocument.getElementById("model").value,
+          temperature: parseFloat(dialogDocument.getElementById("temperature").value),
+          top_p: parseFloat(dialogDocument.getElementById("top_p").value),
+          max_tokens: parseInt(dialogDocument.getElementById("max_tokens").value),
+          similarity_threshold: parseFloat(dialogDocument.getElementById("similarity_threshold").value),
+          top_n: parseInt(dialogDocument.getElementById("top_n").value)
         };
         
-        // 为所有数值字段添加监听器
-        setupNumberInput("temperature", "temperature");
-        setupNumberInput("top_p", "top_p");
-        setupNumberInput("max_tokens", "max_tokens");
-        setupNumberInput("similarity_threshold", "similarity_threshold");
-        setupNumberInput("top_n", "top_n");
-        
-        // 如果是更新模式，尝试获取现有设置
-        if (existingChatId) {
-          try {
-            // 创建加载提示
-            const loadingMessage = dialog.window.document.createElement("div");
-            loadingMessage.textContent = "正在加载聊天助手设置...";
-            loadingMessage.style.textAlign = "center";
-            loadingMessage.style.padding = "10px";
-            loadingMessage.style.gridColumn = "1 / span 2";
-            loadingMessage.style.backgroundColor = "#f0f7ff";
-            loadingMessage.style.borderRadius = "4px";
-            loadingMessage.style.margin = "0 0 15px 0";
-            
-            // 添加到对话框中
-            const container = dialog.window.document.querySelector(".dialog-content");
-            if (container) {
-              container.insertBefore(loadingMessage, container.firstChild);
-            }
-            
-            // 获取远程设置
-            const assistant = await RAGFlowService.getChatAssistantDetails(existingChatId);
-            
-            // 移除加载提示
-            if (loadingMessage.parentNode) {
-              loadingMessage.parentNode.removeChild(loadingMessage);
-            }
-            
-            // 从远程数据构建设置对象
-            const remoteSettings: ChatSettings = {
-              model: assistant.llm?.model_name || defaultSettings.model,
-              temperature: assistant.llm?.temperature || defaultSettings.temperature,
-              top_p: assistant.llm?.top_p || defaultSettings.top_p,
-              max_tokens: assistant.llm?.max_tokens || defaultSettings.max_tokens,
-              similarity_threshold: assistant.prompt?.similarity_threshold || defaultSettings.similarity_threshold,
-              top_n: assistant.prompt?.top_n || defaultSettings.top_n
-            };
-            
-            // 更新表单值
-            setFormValues(remoteSettings);
-            Logger.info("已加载聊天助手设置，ID: " + existingChatId);
-          } catch (error) {
-            // 加载失败，显示错误消息
-            Logger.error(`加载聊天助手设置失败: ${error instanceof Error ? error.message : String(error)}`);
-            
-            const container = dialog.window.document.querySelector(".dialog-content");
-            const loadingMessage = container?.querySelector("div");
-            if (loadingMessage && loadingMessage.parentNode) {
-              loadingMessage.textContent = "加载设置失败，使用默认值";
-              loadingMessage.style.backgroundColor = "#fff0f0";
-              loadingMessage.style.color = "#e53e3e";
-              
-              // 3秒后移除错误提示
-              setTimeout(() => {
-                if (loadingMessage.parentNode) {
-                  loadingMessage.parentNode.removeChild(loadingMessage);
-                }
-              }, 3000);
-            }
-          }
-        }
-      },
-      
-      // 卸载回调 - 当对话框关闭时执行
-      unloadCallback: () => {
-        // 只有点击保存/更新按钮时才处理
-        if (dialog.dialogData._lastButtonId === "save") {
-          Logger.info("保存聊天助手参数设置");
-          
-          // 获取存储在dialogData中的表单值
-          const formValues = dialog.dialogData.formValues;
-          
-          // 在卸载前再次尝试获取模型值，这是确保能拿到最新值的关键部分
-          try {
-            const modelElement = dialog.window.document.getElementById("model-selector") as HTMLSelectElement | null;
-            if (modelElement && modelElement.value) {
-              // 获取最终的模型选择值
-              const finalModelValue = modelElement.value;
-              Logger.debug(`卸载前最终模型值(DOM): ${finalModelValue}`);
-              // 更新所有存储位置
-              currentModelValue = finalModelValue;
-              dialog.dialogData.selectedModel = finalModelValue;
-              formValues.model = finalModelValue;
-            }
-          } catch (e) {
-            Logger.debug(`从DOM获取最终模型值失败: ${e}`);
-            // 继续使用之前保存的值
-          }
-          
-          // 验证并确保参数在有效范围内
-          const validateNumberParam = (value: number, min: number, max: number, defaultVal: number): number => {
-            if (value === undefined || value === null || isNaN(value) || value < min || value > max) {
-              return defaultVal;
-            }
-            return value;
-          };
-          
-          // 构造最终参数对象，优先使用当前模型值
-          const params: ChatAssistantParams = {
-            // 多级回退机制确保总有一个有效值
-            model: currentModelValue || dialog.dialogData.selectedModel || formValues.model || defaultSettings.model,
-            temperature: validateNumberParam(formValues.temperature, 0, 1, defaultSettings.temperature),
-            top_p: validateNumberParam(formValues.top_p, 0, 1, defaultSettings.top_p),
-            max_tokens: validateNumberParam(formValues.max_tokens, 100, 8000, defaultSettings.max_tokens),
-            similarity_threshold: validateNumberParam(formValues.similarity_threshold, 0, 1, defaultSettings.similarity_threshold),
-            top_n: validateNumberParam(formValues.top_n, 1, 10, defaultSettings.top_n)
-          };
-          
-          // 记录最终参数值
-          Logger.info(`聊天助手最终参数: ${JSON.stringify(params)}`);
-          Logger.info(`- 模型: ${params.model}`);
-          
-          // 调用回调函数
-          callback(params);
-        }
-      }
-    });
-    
-    // 打开对话框
-    dialog.open("RAGFlow " + dialogTitle, {
-      width: 500,
-      height: 450,
-      centerscreen: true,
-      resizable: true
+        callback(params);
+        return true;
+      };
     });
   }
+
 }

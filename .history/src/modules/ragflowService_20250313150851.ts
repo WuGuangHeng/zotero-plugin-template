@@ -684,7 +684,7 @@ public static async createDataset(name: string): Promise<string> {
       throw error;
     }
   }
-      /**
+    /**
    * 更新聊天助手
    * @param chatId 聊天助手ID
    * @param name 聊天助手名称
@@ -694,61 +694,24 @@ public static async createDataset(name: string): Promise<string> {
     try {
       Logger.info(`更新聊天助手，ID: ${chatId}, 名称: ${name}`);
       
-      // check params
-      Logger.debug(`更新聊天助手参数: ${JSON.stringify(params, null, 2)}`);
-      
-      // 获取现有聊天助手的详细信息
-      const existingAssistant = await this.getChatAssistantDetails(chatId);
-      
-      // 构建更新请求，保留现有配置并合并新配置
       const requestBody: any = {
         name: name
       };
       
       // 如果提供了参数，添加到请求体中
       if (params) {
-        // 使用现有助手的 llm 信息作为基础
         requestBody.llm = {
-          model_name: params.model || existingAssistant.llm?.model_name || "deepseek-chat",
+          model_name: params.model,
           temperature: params.temperature,
           top_p: params.top_p,
           max_tokens: params.max_tokens
         };
         
-        // 添加现有助手中可能存在的其他 llm 参数
-        if (existingAssistant.llm) {
-          if (existingAssistant.llm.presence_penalty !== undefined) {
-            requestBody.llm.presence_penalty = existingAssistant.llm.presence_penalty;
-          }
-          if (existingAssistant.llm.frequency_penalty !== undefined) {
-            requestBody.llm.frequency_penalty = existingAssistant.llm.frequency_penalty;
-          }
-        }
-        
-        // 使用现有助手的 prompt 信息作为基础
         requestBody.prompt = {
           similarity_threshold: params.similarity_threshold,
           top_n: params.top_n
         };
-        
-        // 添加现有助手中可能存在的其他 prompt 参数
-        if (existingAssistant.prompt) {
-          if (existingAssistant.prompt.keywords_similarity_weight !== undefined) {
-            requestBody.prompt.keywords_similarity_weight = existingAssistant.prompt.keywords_similarity_weight;
-          }
-          if (existingAssistant.prompt.variables) {
-            requestBody.prompt.variables = existingAssistant.prompt.variables;
-          }
-          if (existingAssistant.prompt.empty_response) {
-            requestBody.prompt.empty_response = existingAssistant.prompt.empty_response;
-          }
-          if (existingAssistant.prompt.opener) {
-            requestBody.prompt.opener = existingAssistant.prompt.opener;
-          }
-        }
       }
-      
-      Logger.debug(`更新聊天助手请求体: ${JSON.stringify(requestBody, null, 2)}`);
       
       const response = await fetch(`${this.baseURL}/api/v1/chats/${chatId}`, {
         method: "PUT",

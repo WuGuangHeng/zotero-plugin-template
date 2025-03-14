@@ -684,7 +684,7 @@ public static async createDataset(name: string): Promise<string> {
       throw error;
     }
   }
-      /**
+    /**
    * 更新聊天助手
    * @param chatId 聊天助手ID
    * @param name 聊天助手名称
@@ -694,61 +694,24 @@ public static async createDataset(name: string): Promise<string> {
     try {
       Logger.info(`更新聊天助手，ID: ${chatId}, 名称: ${name}`);
       
-      // check params
-      Logger.debug(`更新聊天助手参数: ${JSON.stringify(params, null, 2)}`);
-      
-      // 获取现有聊天助手的详细信息
-      const existingAssistant = await this.getChatAssistantDetails(chatId);
-      
-      // 构建更新请求，保留现有配置并合并新配置
       const requestBody: any = {
         name: name
       };
       
       // 如果提供了参数，添加到请求体中
       if (params) {
-        // 使用现有助手的 llm 信息作为基础
         requestBody.llm = {
-          model_name: params.model || existingAssistant.llm?.model_name || "deepseek-chat",
+          model_name: params.model,
           temperature: params.temperature,
           top_p: params.top_p,
           max_tokens: params.max_tokens
         };
         
-        // 添加现有助手中可能存在的其他 llm 参数
-        if (existingAssistant.llm) {
-          if (existingAssistant.llm.presence_penalty !== undefined) {
-            requestBody.llm.presence_penalty = existingAssistant.llm.presence_penalty;
-          }
-          if (existingAssistant.llm.frequency_penalty !== undefined) {
-            requestBody.llm.frequency_penalty = existingAssistant.llm.frequency_penalty;
-          }
-        }
-        
-        // 使用现有助手的 prompt 信息作为基础
         requestBody.prompt = {
           similarity_threshold: params.similarity_threshold,
           top_n: params.top_n
         };
-        
-        // 添加现有助手中可能存在的其他 prompt 参数
-        if (existingAssistant.prompt) {
-          if (existingAssistant.prompt.keywords_similarity_weight !== undefined) {
-            requestBody.prompt.keywords_similarity_weight = existingAssistant.prompt.keywords_similarity_weight;
-          }
-          if (existingAssistant.prompt.variables) {
-            requestBody.prompt.variables = existingAssistant.prompt.variables;
-          }
-          if (existingAssistant.prompt.empty_response) {
-            requestBody.prompt.empty_response = existingAssistant.prompt.empty_response;
-          }
-          if (existingAssistant.prompt.opener) {
-            requestBody.prompt.opener = existingAssistant.prompt.opener;
-          }
-        }
       }
-      
-      Logger.debug(`更新聊天助手请求体: ${JSON.stringify(requestBody, null, 2)}`);
       
       const response = await fetch(`${this.baseURL}/api/v1/chats/${chatId}`, {
         method: "PUT",
@@ -780,49 +743,6 @@ public static async createDataset(name: string): Promise<string> {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       Logger.error(`更新聊天助手失败: ${errorMessage}`, error);
-      throw error;
-    }
-  }
-
-    /**
-   * 获取聊天助手详情
-   * @param chatId 聊天助手ID
-   */
-  public static async getChatAssistantDetails(chatId: string): Promise<ChatAssistantResponse> {
-    try {
-      Logger.info(`获取聊天助手详情，ID: ${chatId}`);
-      
-      const response = await fetch(`${this.baseURL}/api/v1/chats?id=${chatId}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`
-        }
-      });
-      
-      const responseText = await response.text();
-      Logger.debug(`获取聊天助手详情API原始响应: ${responseText}`);
-      
-      let result;
-      try {
-        result = JSON.parse(responseText) as RAGFlowAPIResponse<ChatAssistantResponse[]>;
-      } catch (parseError) {
-        Logger.error(`解析获取聊天助手详情API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        throw new Error(`解析获取聊天助手详情API返回内容失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-      
-      if (result.code !== 0) {
-        Logger.error(`获取聊天助手详情失败: ${result.message}`);
-        throw new Error(result.message || "获取聊天助手详情失败");
-      }
-      
-      if (!result.data || result.data.length === 0) {
-        throw new Error("找不到指定的聊天助手");
-      }
-      
-      return result.data[0];
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      Logger.error(`获取聊天助手详情失败: ${errorMessage}`, error);
       throw error;
     }
   }

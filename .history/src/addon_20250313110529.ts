@@ -389,6 +389,9 @@ class Addon {
       RAGFlowUI.createQuestionInputDialog();
   }
   
+  /**
+ * 处理问题并获取回答
+ */
   public async processQuestion(question: string) {
     try {
       Logger.info(`处理用户问题: ${question}`);
@@ -409,9 +412,6 @@ class Addon {
         return;
       }
       
-      // 将 kbId 明确为 string 类型，解决后续所有类型问题
-      const kbId: string = this.data.kbId;
-      
       // 显示处理中提示
       const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 问答");
       progressWindow.createLine({ 
@@ -421,7 +421,7 @@ class Addon {
       progressWindow.show();
       
       // 先尝试从存储中获取聊天助手ID
-      let chatAssistantId = this.getChatAssistantId(kbId);
+      let chatAssistantId = this.getChatAssistantId(this.data.kbId);
       
       // 如果没有聊天助手ID，创建一个新的聊天助手
       if (!chatAssistantId) {
@@ -434,18 +434,18 @@ class Addon {
         const kbName = Zotero.Prefs.get(`${config.prefsPrefix}.kbName`, true) as string || "Zotero知识库";
         
         // 打开聊天助手参数设置对话框
-        RAGFlowUI.createChatAssistantSettingsDialog(kbId, async (params) => {
+        RAGFlowUI.createChatAssistantSettingsDialog(this.data.kbId, async (params) => {
           try {
             // 创建聊天助手
             const assistantName = `Zotero-${kbName}-${new Date().toISOString().slice(0, 10)}`;
             chatAssistantId = await RAGFlowService.createChatAssistant(
-              kbId, 
+              this.data.kbId, 
               assistantName, 
               params
             );
             
             // 保存聊天助手与知识库的映射关系
-            this.saveChatAssistantMapping(kbId, chatAssistantId);
+            this.saveChatAssistantMapping(this.data.kbId, chatAssistantId);
             
             // 继续处理会话
             this.continueQuestionProcessing(chatAssistantId, question, progressWindow);
@@ -642,92 +642,6 @@ class Addon {
    */
   private getActiveSessionId(chatAssistantId: string): string | null {
     return Zotero.Prefs.get(`${config.prefsPrefix}.activeSession.${chatAssistantId}`, true) as string || null;
-  }
-
-    /**
-   * 打开聊天助手设置对话框，用于更新现有聊天助手
-   */
-  public async openChatAssistantSettings() {
-    try {
-      // 检查是否有知识库ID
-      if (!this.data.kbId) {
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ 
-          text: "请先选择知识库",
-          type: "error" 
-        });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
-      // 获取聊天助手ID
-      const chatAssistantId = this.getChatAssistantId(this.data.kbId);
-      if (!chatAssistantId) {
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ 
-          text: "当前知识库没有关联的聊天助手，请先提问以创建聊天助手",
-          type: "error" 
-        });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
-      // 显示处理中提示
-      const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow");
-      progressWindow.createLine({ 
-        text: "正在加载聊天助手设置...",
-        type: "default" 
-      });
-      progressWindow.show();
-      
-      // 获取知识库名称
-      const kbName = Zotero.Prefs.get(`${config.prefsPrefix}.kbName`, true) as string || "Zotero知识库";
-      const assistantName = `Zotero-${kbName}`;
-      
-      // 打开设置对话框，提供当前聊天助手ID供更新使用
-      RAGFlowUI.createChatAssistantSettingsDialog(this.data.kbId, async (params) => {
-        try {
-          // 更新聊天助手
-          await RAGFlowService.updateChatAssistant(chatAssistantId, assistantName, params);
-          
-          // 关闭进度窗口
-          progressWindow.close();
-          
-          // 显示成功消息
-          const successWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow");
-          successWindow.createLine({ 
-            text: "聊天助手设置已更新",
-            type: "success" 
-          });
-          successWindow.show();
-          successWindow.startCloseTimer(3000);
-        } catch (error) {
-          progressWindow.close();
-          
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-          errorWindow.createLine({ 
-            text: `更新聊天助手失败: ${errorMessage}`,
-            type: "error" 
-          });
-          errorWindow.show();
-          errorWindow.startCloseTimer(3000);
-        }
-      }, chatAssistantId); // 传入现有chatAssistantId表示这是更新操作
-    } catch (error) {
-      Logger.error("打开聊天助手设置失败", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-      errorWindow.createLine({ 
-        text: `打开聊天助手设置失败: ${errorMessage}`,
-        type: "error" 
-      });
-      errorWindow.show();
-      errorWindow.startCloseTimer(3000);
-    }
   }
 }
 

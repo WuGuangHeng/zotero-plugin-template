@@ -31,9 +31,6 @@ class Addon {
   // APIs
   public api: object;
 
-  private chatAssistantId?: string;
-  private sessionId?: string;
-
   constructor() {
     this.data = {
       alive: true,
@@ -358,12 +355,12 @@ class Addon {
       progressWindow.startCloseTimer(3000);
     }
   }
-
   public async openQuestionDialog() {
     // 首先检查是否配置了API密钥
     const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`, true) as string;
     if (!apiKey) {
-      const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 提示");
+      // 修改: 使用正确的 ProgressWindow 创建方式
+      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 提示");
       progressWindow.createLine({ 
         text: "请先在设置中配置 RAGFlow API 密钥" 
       });
@@ -376,357 +373,93 @@ class Addon {
     }
     
     if (!this.data.kbId) {
-      const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
+      // 修改: 使用正确的 ProgressWindow 创建方式
+      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
       progressWindow.createLine({ 
         text: "尚未创建知识库，请先选择集合并上传到 RAGFlow" 
       });
       progressWindow.show();
       progressWindow.startCloseTimer(3000);
       return;
-      }
+    }
+    
+    // 修改: 使用正确的 Dialog 创建方式
+    const dialogWindow = new ztoolkit.Dialog(2, 1)
+      .addCell(0, 0, {
+        tag: "h3",
+        properties: { innerHTML: "请输入您的问题：" },
+        styles: { marginBottom: "10px" }
+      })
+      .addCell(1, 0, {
+        tag: "textarea",
+        namespace: "html",
+        id: "question-input",
+        attributes: { 
+          "data-bind": "question",
+          "data-prop": "value",
+          rows: "5"
+        },
+        styles: { 
+          width: "100%", 
+          minHeight: "100px", 
+          padding: "10px", 
+          marginBottom: "20px" 
+        }
+      })
+      .addButton("提问", "ask")
+      .addButton("取消", "cancel")
+      .setDialogData({
+        question: "",
+        onUnload: (dialogData: any) => {
+          if (dialogData._lastButtonId === "ask" && dialogData.question.trim()) {
+            this.processQuestion(dialogData.question.trim());
+          }
+        }
+      });
       
-      // 直接调用 RAGFlowUI 中的方法，避免重复实现
-      RAGFlowUI.createQuestionInputDialog();
+    dialogWindow.open("RAGFlow 问答", {
+      width: 500,
+      height: 250,
+      centerscreen: true,
+      resizable: true
+    });
   }
   
+  /**
+   * 处理问题并获取回答
+   */
   public async processQuestion(question: string) {
     try {
-      Logger.info(`处理用户问题: ${question}`);
-      
       // 检查 kbId 是否存在
       if (!this.data.kbId) {
-        Logger.warn("知识库ID不存在");
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ 
-          text: "请先选择知识库",
-          type: "error" 
-        });
+        const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
+        progressWindow.createLine({ text: "知识库ID不存在，请重新上传集合" });
         progressWindow.show();
         progressWindow.startCloseTimer(3000);
-        
-        // 1秒后打开知识库选择器
-        setTimeout(() => this.openKnowledgeBaseSelector(), 1000);
         return;
       }
       
-      // 将 kbId 明确为 string 类型，解决后续所有类型问题
-      const kbId: string = this.data.kbId;
-      
-      // 显示处理中提示
-      const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 问答");
-      progressWindow.createLine({ 
-        text: "正在准备聊天助手...",
-        type: "default"
-      });
+      // 修改: 使用正确的 ProgressWindow 创建方式
+      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 问答");
+      progressWindow.createLine({ text: "正在获取回答..." });
       progressWindow.show();
       
-      // 先尝试从存储中获取聊天助手ID
-      let chatAssistantId = this.getChatAssistantId(kbId);
-      
-      // 如果没有聊天助手ID，创建一个新的聊天助手
-      if (!chatAssistantId) {
-        progressWindow.createLine({
-          text: "正在创建聊天助手...",
-          type: "default"
-        });
-        
-        // 获取知识库名称
-        const kbName = Zotero.Prefs.get(`${config.prefsPrefix}.kbName`, true) as string || "Zotero知识库";
-        
-        // 打开聊天助手参数设置对话框
-        RAGFlowUI.createChatAssistantSettingsDialog(kbId, async (params) => {
-          try {
-            // 创建聊天助手
-            const assistantName = `Zotero-${kbName}-${new Date().toISOString().slice(0, 10)}`;
-            chatAssistantId = await RAGFlowService.createChatAssistant(
-              kbId, 
-              assistantName, 
-              params
-            );
-            
-            // 保存聊天助手与知识库的映射关系
-            this.saveChatAssistantMapping(kbId, chatAssistantId);
-            
-            // 继续处理会话
-            this.continueQuestionProcessing(chatAssistantId, question, progressWindow);
-          } catch (error) {
-            this.handleQuestionError(error, progressWindow);
-          }
-        });
-        
-        return;
-      } else {
-        // 已有聊天助手，继续处理会话
-        this.continueQuestionProcessing(chatAssistantId, question, progressWindow);
-      }
-    } catch (error) {
-      this.handleQuestionError(error);
-    }
-  }
-
-  /**
-   * 继续问题处理流程（处理会话部分）
-   */
-  private async continueQuestionProcessing(chatAssistantId: string, question: string, progressWindow: any) {
-    try {
-      // 获取当前活动会话ID
-      let sessionId = this.getActiveSessionId(chatAssistantId);
-      
-      // 如果没有会话ID，创建一个新的会话
-      if (!sessionId) {
-        progressWindow.createLine({
-          text: "正在创建问答会话...",
-          type: "default"
-        });
-        
-        const sessionName = `Zotero问答-${new Date().toISOString().slice(0, 10)}`;
-        Logger.info(`创建会话: ${sessionName}, 聊天助手ID: ${chatAssistantId}`);
-        
-        sessionId = await RAGFlowService.createSession(chatAssistantId, sessionName);
-        Logger.info(`会话创建成功，ID: ${sessionId}`);
-        
-        // 保存会话信息
-        this.saveSessionInfo(chatAssistantId, sessionId, sessionName);
-      }
-      
-      // 使用聊天助手和会话发送问题
-      progressWindow.createLine({ 
-        text: "正在获取回答...",
-        type: "default"
-      });
-      
-      Logger.info(`向聊天助手 ${chatAssistantId} 的会话 ${sessionId} 发送问题: ${question}`);
-      
-      // 调用askQuestion方法，传入正确的参数
-      const result = await RAGFlowService.askQuestion(chatAssistantId, sessionId, question);
-      Logger.info("成功获取回答");
+      // 由于前面已经检查了 kbId 不为空，这里可以使用非空断言或类型断言
+      const answer = await RAGFlowService.askQuestion(this.data.kbId as string, question);
+      // 或者使用非空断言: 
+      // const answer = await RAGFlowService.askQuestion(this.data.kbId!, question);
       
       // 关闭进度窗口
       progressWindow.close();
       
       // 显示回答窗口
-      RAGFlowUI.createQuestionDialog(question, result.answer, result.sources);
-    } catch (error) {
-      this.handleQuestionError(error, progressWindow);
-    }
-  }
-
-  /**
-   * 处理问答过程中的错误
-   */
-  private handleQuestionError(error: unknown, progressWindow?: any) {
-    Logger.error("处理问题失败", error);
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    // 关闭现有进度窗口
-    if (progressWindow) {
-      progressWindow.close();
-    }
-    
-    // 创建错误提示窗口
-    const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-    
-    // 处理特定错误类型
-    if (errorMessage.includes("聊天助手") || errorMessage.includes("chat assistant")) {
-      // 聊天助手相关错误，尝试重置聊天助手ID
-      errorWindow.createLine({ 
-        text: `聊天助手错误，请重试: ${errorMessage}`,
-        type: "error" 
-      });
-    } else if (errorMessage.includes("会话") || errorMessage.includes("session")) {
-      // 会话相关错误，尝试重置会话ID
-      errorWindow.createLine({ 
-        text: `会话错误，请重试: ${errorMessage}`,
-        type: "error" 
-      });
-    } else if (errorMessage.includes("余额不足") || errorMessage.includes("Insufficient Balance")) {
-      // API余额不足错误
-      errorWindow.createLine({ 
-        text: "RAGFlow API账户余额不足，请充值后再试",
-        type: "error" 
-      });
-    } else {
-      // 其他一般错误
-      errorWindow.createLine({ 
-        text: `获取回答失败: ${errorMessage}`,
-        type: "error" 
-      });
-    }
-    
-    errorWindow.show();
-    errorWindow.startCloseTimer(5000);
-  }
-
-  // 会话管理
-  /**
-   * 保存知识库与聊天助手的关联关系
-   */
-  private saveChatAssistantMapping(datasetId: string, assistantId: string): void {
-    try {
-      // 先获取现有映射
-      const mappingStr = Zotero.Prefs.get(`${config.prefsPrefix}.chatAssistantMapping`, true) as string || "{}";
-      const mapping = JSON.parse(mappingStr);
-      
-      // 添加/更新映射
-      mapping[datasetId] = assistantId;
-      
-      // 保存回首选项
-      Zotero.Prefs.set(`${config.prefsPrefix}.chatAssistantMapping`, JSON.stringify(mapping), true);
-      Logger.info(`已保存知识库(${datasetId})与聊天助手(${assistantId})的关联关系`);
-    } catch (error) {
-      Logger.error("保存聊天助手映射失败", error);
-    }
-  }
-  
-  /**
-   * 获取知识库关联的聊天助手ID
-   */
-  private getChatAssistantId(datasetId: string): string | null {
-    try {
-      const mappingStr = Zotero.Prefs.get(`${config.prefsPrefix}.chatAssistantMapping`, true) as string || "{}";
-      const mapping = JSON.parse(mappingStr);
-      return mapping[datasetId] || null;
-    } catch (error) {
-      Logger.error("获取聊天助手ID失败", error);
-      return null;
-    }
-  }
-  
-  /**
-   * 保存会话信息
-   */
-  private saveSessionInfo(chatAssistantId: string, sessionId: string, sessionName: string): void {
-    try {
-      // 获取现有会话列表
-      const sessionsStr = Zotero.Prefs.get(`${config.prefsPrefix}.sessions.${chatAssistantId}`, true) as string || "[]";
-      const sessions = JSON.parse(sessionsStr);
-      
-      // 检查会话是否已存在
-      const existingIndex = sessions.findIndex((s: {id: string}) => s.id === sessionId);
-      if (existingIndex >= 0) {
-        // 更新已有会话
-        sessions[existingIndex] = { id: sessionId, name: sessionName, lastUsed: Date.now() };
-      } else {
-        // 添加新会话
-        sessions.push({ id: sessionId, name: sessionName, lastUsed: Date.now() });
-      }
-      
-      // 保存回首选项
-      Zotero.Prefs.set(`${config.prefsPrefix}.sessions.${chatAssistantId}`, JSON.stringify(sessions), true);
-      
-      // 同时更新当前活动会话
-      Zotero.Prefs.set(`${config.prefsPrefix}.activeSession.${chatAssistantId}`, sessionId, true);
-      
-      Logger.info(`已保存会话信息: 助手ID=${chatAssistantId}, 会话ID=${sessionId}, 名称=${sessionName}`);
-    } catch (error) {
-      Logger.error("保存会话信息失败", error);
-    }
-  }
-  
-  /**
-   * 获取聊天助手的会话列表
-   */
-  private getSessionList(chatAssistantId: string): Array<{id: string, name: string, lastUsed: number}> {
-    try {
-      const sessionsStr = Zotero.Prefs.get(`${config.prefsPrefix}.sessions.${chatAssistantId}`, true) as string || "[]";
-      return JSON.parse(sessionsStr);
-    } catch (error) {
-      Logger.error("获取会话列表失败", error);
-      return [];
-    }
-  }
-  
-  /**
-   * 获取当前活动会话ID
-   */
-  private getActiveSessionId(chatAssistantId: string): string | null {
-    return Zotero.Prefs.get(`${config.prefsPrefix}.activeSession.${chatAssistantId}`, true) as string || null;
-  }
-
-    /**
-   * 打开聊天助手设置对话框，用于更新现有聊天助手
-   */
-  public async openChatAssistantSettings() {
-    try {
-      // 检查是否有知识库ID
-      if (!this.data.kbId) {
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ 
-          text: "请先选择知识库",
-          type: "error" 
-        });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
-      // 获取聊天助手ID
-      const chatAssistantId = this.getChatAssistantId(this.data.kbId);
-      if (!chatAssistantId) {
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-        progressWindow.createLine({ 
-          text: "当前知识库没有关联的聊天助手，请先提问以创建聊天助手",
-          type: "error" 
-        });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        return;
-      }
-      
-      // 显示处理中提示
-      const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow");
-      progressWindow.createLine({ 
-        text: "正在加载聊天助手设置...",
-        type: "default" 
-      });
-      progressWindow.show();
-      
-      // 获取知识库名称
-      const kbName = Zotero.Prefs.get(`${config.prefsPrefix}.kbName`, true) as string || "Zotero知识库";
-      const assistantName = `Zotero-${kbName}`;
-      
-      // 打开设置对话框，提供当前聊天助手ID供更新使用
-      RAGFlowUI.createChatAssistantSettingsDialog(this.data.kbId, async (params) => {
-        try {
-          // 更新聊天助手
-          await RAGFlowService.updateChatAssistant(chatAssistantId, assistantName, params);
-          
-          // 关闭进度窗口
-          progressWindow.close();
-          
-          // 显示成功消息
-          const successWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow");
-          successWindow.createLine({ 
-            text: "聊天助手设置已更新",
-            type: "success" 
-          });
-          successWindow.show();
-          successWindow.startCloseTimer(3000);
-        } catch (error) {
-          progressWindow.close();
-          
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-          errorWindow.createLine({ 
-            text: `更新聊天助手失败: ${errorMessage}`,
-            type: "error" 
-          });
-          errorWindow.show();
-          errorWindow.startCloseTimer(3000);
-        }
-      }, chatAssistantId); // 传入现有chatAssistantId表示这是更新操作
-    } catch (error) {
-      Logger.error("打开聊天助手设置失败", error);
+      RAGFlowUI.createQuestionDialog(question, answer);
+    } catch (error: unknown) {
+      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow 错误");
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-      errorWindow.createLine({ 
-        text: `打开聊天助手设置失败: ${errorMessage}`,
-        type: "error" 
-      });
-      errorWindow.show();
-      errorWindow.startCloseTimer(3000);
+      progressWindow.createLine({ text: `获取回答失败: ${errorMessage}` });
+      progressWindow.show();
+      progressWindow.startCloseTimer(3000);
     }
   }
 }
