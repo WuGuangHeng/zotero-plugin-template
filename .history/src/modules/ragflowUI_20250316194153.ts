@@ -2,7 +2,6 @@
 import { config } from "../../package.json";
 import { RAGFlowService, ChatAssistantParams } from "./ragflowService";
 import { Logger } from "./logger";
-import { StorageManager, ChatHistoryEntry } from "./storageManager";
 
 // 添加一个类型定义来支持字符串索引
 interface ChatSettings {
@@ -705,452 +704,361 @@ export class RAGFlowUI {
       resizable: true
     });
     
-    // 保存问答历史 - 使用异步调用，不等待完成
-    this.saveQuestionAnswerHistory(question, answer, sources).catch(e => {
-      Logger.error("保存历史失败", e);
-    });
+    // 保存问答历史
+    this.saveQuestionAnswerHistory(question, answer, sources);
     
     return dialog;
   }
   
   /**
-   * 保存问答历史
-   * @param question 问题文本
-   * @param answer 回答文本
-   * @param sources 可选的参考来源信息
-   */
-  private static async saveQuestionAnswerHistory(question: string, answer: string, sources?: Array<{content: string, document_name: string}>) {
+ * 保存问答历史
+ * @param question 问题文本
+ * @param answer 回答文本
+ * @param sources 可选的参考来源信息
+ */
+  private static saveQuestionAnswerHistory(question: string, answer: string, sources?: Array<{content: string, document_name: string}>) {
     try {
-      Logger.info("开始保存问答历史记录");
+      // 获取当前历史记录
+      const historyJSON = Zotero.Prefs.get(`${config.prefsPrefix}.qaHistory`, true) as string || "[]";
+      let history = [];
+      try {
+        history = JSON.parse(historyJSON);
+      } catch (e) {
+        Logger.error("解析问答历史记录失败", e);
+        history = [];
+      }
       
-      // 使用StorageManager保存历史记录，替代原来的Zotero.Prefs
-      await StorageManager.saveQuestionAnswerHistory(question, answer, sources);
+      // 添加新的记录
+      history.unshift({
+        question,
+        answer,
+        sources: sources || [],
+        timestamp: new Date().toISOString()
+      });
       
+      // 限制历史记录数量（保留最近50条）
+      if (history.length > 50) {
+        history = history.slice(0, 50);
+      }
+      
+      // 保存回偏好设置
+      Zotero.Prefs.set(`${config.prefsPrefix}.qaHistory`, JSON.stringify(history), true);
       Logger.info("问答历史记录已保存");
-    } catch (error) {
-      Logger.error("保存问答历史记录失败", error);
+    } catch (e) {
+      Logger.error("保存问答历史记录失败", e);
     }
   }
   
   /**
-   * 创建问答历史对话框，使用文件系统存储替代Zotero Prefs
-   */
-  public static async createHistoryDialog() {
+ * 修改 createHistoryDialog 方法，添加来源信息显示
+ */
+  public static createHistoryDialog() {
     Logger.info("创建问答历史对话框");
     
+    // 获取历史记录
+    const historyJSON = Zotero.Prefs.get(`${config.prefsPrefix}.qaHistory`, true) as string || "[]";
+    let history = [];
     try {
-      // 显示加载中提示
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow");
-      progressWindow.createLine({ text: "加载历史记录..." });
-      progressWindow.show();
-      
-      // 使用 StorageManager 获取历史记录
-      const history = await StorageManager.getQuestionAnswerHistory();
-      
-      // 关闭进度窗口
-      progressWindow.close();
-      
-      // 如果没有历史记录
-      if (history.length === 0) {
-        const notification = new ztoolkit.ProgressWindow("RAGFlow 历史记录");
-        notification.createLine({ text: "暂无问答历史记录", type: "default" });
-        notification.show();
-        notification.startCloseTimer(2000);
-        return;
-      }
-      
-      // 创建对话框
-      const dialog = new ztoolkit.Dialog(2, 1)
-        // 标题
-        .addCell(0, 0, {
-          tag: "h3",
-          properties: { innerHTML: "RAGFlow 问答历史记录" },
-          styles: { 
-            margin: "10px 0 20px 0", 
-            color: "#2d2d2d",
-            textAlign: "center"
-          }
-        })
-        // 历史记录列表
-        .addCell(1, 0, {
-          tag: "div",
-          styles: { 
-            overflowY: "auto", 
-            maxHeight: "500px",
-            padding: "0 5px"
-          },
-          children: history.map((item: ChatHistoryEntry, index: number) => {
-            const date = new Date(item.timestamp);
-            const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            const hasSources = item.sources && item.sources.length > 0;
-            
-            return {
-              tag: "div",
-              styles: {
-                marginBottom: "20px",
-                padding: "15px",
-                backgroundColor: index % 2 === 0 ? "#f8f9fa" : "#fff",
-                borderRadius: "6px",
-                border: "1px solid #eee"
-              },
-              children: [
-                // 时间戳
-                {
-                  tag: "div",
-                  styles: {
-                    fontSize: "0.8em",
-                    color: "#888",
-                    marginBottom: "8px"
-                  },
-                  properties: { textContent: formattedDate }
-                },
-                // 问题
-                {
-                  tag: "div",
-                  styles: {
-                    marginBottom: "10px"
-                  },
-                  children: [
-                    {
-                      tag: "span",
-                      styles: {
-                        backgroundColor: "#4b6bfb",
-                        color: "white",
-                        padding: "2px 6px",
-                        borderRadius: "10px",
-                        marginRight: "8px",
-                        fontSize: "0.75em"
-                      },
-                      properties: { innerHTML: "问题" }
-                    },
-                    {
-                      tag: "span",
-                      styles: {
-                        fontWeight: "500"
-                      },
-                      properties: { textContent: item.question }
-                    }
-                  ]
-                },
-                // 回答
-                {
-                  tag: "div",
-                  styles: {
-                    backgroundColor: "#f0fdf4",
-                    padding: "10px",
-                    borderRadius: "4px",
-                    fontSize: "0.95em",
-                    border: "1px solid #d1fae5",
-                    marginBottom: hasSources ? "10px" : "0"
-                  },
-                  children: [
-                    {
-                      tag: "div",
-                      styles: {
-                        display: "flex",
-                        marginBottom: "5px"
-                      },
-                      children: [
-                        {
-                          tag: "span",
-                          styles: {
-                            backgroundColor: "#10b981",
-                            color: "white",
-                            padding: "2px 6px",
-                            borderRadius: "10px",
-                            marginRight: "8px",
-                            fontSize: "0.75em"
-                          },
-                          properties: { innerHTML: "回答" }
-                        }
-                      ]
-                    },
-                    {
-                      tag: "div",
-                      styles: {
-                        whiteSpace: "pre-wrap",
-                        maxHeight: "150px",
-                        overflowY: "auto"
-                      },
-                      properties: { textContent: item.answer }
-                    }
-                  ]
-                },
-                // 来源信息 (如果有)
-                ...(hasSources ? [{
-                  tag: "div",
-                  styles: {
-                    marginTop: "10px",
-                    backgroundColor: "#fff7ed",
-                    padding: "10px",
-                    borderRadius: "4px",
-                    fontSize: "0.9em",
-                    border: "1px solid #ffedd5",
-                    maxHeight: "100px",
-                    overflowY: "auto"
-                  },
-                  children: [
-                    {
-                      tag: "div",
-                      styles: {
-                        display: "flex",
-                        marginBottom: "5px"
-                      },
-                      children: [
-                        {
-                          tag: "span",
-                          styles: {
-                            backgroundColor: "#f97316",
-                            color: "white",
-                            padding: "2px 6px",
-                            borderRadius: "10px",
-                            marginRight: "8px",
-                            fontSize: "0.75em"
-                          },
-                          properties: { innerHTML: "来源" }
-                        },
-                        {
-                          tag: "span",
-                          styles: {
-                            fontSize: "0.8em",
-                            color: "#666"
-                          },
-                          properties: { textContent: `${item.sources.length} 个参考来源` }
-                        }
-                      ]
-                    },
-                    ...item.sources.slice(0, 2).map((source: any, sourceIdx: number) => ({
-                      tag: "div",
-                      styles: {
-                        fontSize: "0.8em",
-                        color: "#555",
-                        paddingLeft: "10px",
-                        borderLeft: "2px solid #ffedd5",
-                        marginTop: "5px"
-                      },
-                      properties: { textContent: `${source.document_name}` }
-                    })),
-                    ...(item.sources.length > 2 ? [{
-                      tag: "div",
-                      styles: {
-                        fontSize: "0.8em",
-                        color: "#888",
-                        marginTop: "5px",
-                        fontStyle: "italic"
-                      },
-                      properties: { textContent: `...还有 ${item.sources.length - 2} 个来源` }
-                    }] : [])
-                  ]
-                }] : []),
-                // 操作按钮
-                {
-                  tag: "div",
-                  styles: {
-                    marginTop: "10px",
-                    textAlign: "right"
-                  },
-                  children: [
-                    {
-                      tag: "button",
-                      namespace: "html",
-                      attributes: {
-                        type: "button",
-                        "data-index": index.toString(),
-                        "class": "history-btn-copy"
-                      },
-                      styles: {
-                        padding: "3px 8px",
-                        marginRight: "8px",
-                        cursor: "pointer",
-                        backgroundColor: "#f0f0f0",
-                        border: "1px solid #ddd",
-                        borderRadius: "3px"
-                      },
-                      properties: { textContent: "复制回答" }
-                    },
-                    {
-                      tag: "button",
-                      namespace: "html",
-                      attributes: {
-                        type: "button",
-                        "data-index": index.toString(),
-                        "class": "history-btn-reask"
-                      },
-                      styles: {
-                        padding: "3px 8px",
-                        cursor: "pointer",
-                        backgroundColor: "#4b6bfb",
-                        border: "1px solid #4b6bfb",
-                        borderRadius: "3px",
-                        color: "white"
-                      },
-                      properties: { textContent: "再次提问" }
-                    }
-                  ]
-                }
-              ]
-            };
-          })
-        })
-        // 添加管理按钮和关闭按钮
-        .addButton("管理历史", "manage")
-        .addButton("关闭", "close")
-        .setDialogData({
-          loadCallback: () => {
-            // 为所有复制按钮添加事件
-            const copyButtons = dialog.window.document.querySelectorAll(".history-btn-copy");
-            copyButtons.forEach((button) => {
-              button.addEventListener("click", (event) => {
-                const target = event.currentTarget as HTMLElement;
-                const index = parseInt(target.getAttribute("data-index") || "0");
-                Zotero.Utilities.Internal.copyTextToClipboard(history[index].answer);
-                const notification = new ztoolkit.ProgressWindow("RAGFlow");
-                notification.createLine({ text: "回答已复制到剪贴板", type: "success" });
-                notification.show();
-                notification.startCloseTimer(1500);
-              });
-            });
-            
-            // 为所有再次提问按钮添加事件
-            const reaskButtons = dialog.window.document.querySelectorAll(".history-btn-reask");
-            reaskButtons.forEach((button) => {
-              button.addEventListener("click", (event) => {
-                const target = event.currentTarget as HTMLElement;
-                const index = parseInt(target.getAttribute("data-index") || "0");
-                dialog.window.close();
-                // 打开提问对话框并预填问题
-                setTimeout(() => {
-                  const questionDialog = RAGFlowUI.createQuestionInputDialog();
-                  if (questionDialog.dialogData) {
-                    questionDialog.dialogData.question = history[index].question;
-                    // 更新文本框中的值
-                    const textArea = questionDialog.window.document.getElementById("question-input");
-                    if (textArea) {
-                      (textArea as HTMLTextAreaElement).value = history[index].question;
-                    }
-                  }
-                }, 100);
-              });
-            });
-          },
-          unloadCallback: () => {
-            // 处理管理按钮点击
-            if (dialog.dialogData._lastButtonId === "manage") {
-              // 打开历史管理对话框
-              setTimeout(() => RAGFlowUI.createHistoryManagementDialog(), 100);
-            }
-          }
-        });
-      
-      // 打开对话框
-      dialog.open("RAGFlow 问答历史", {
-        width: 700,
-        height: 600,
-        centerscreen: true,
-        resizable: true
-      });
-      
-      return dialog;
-    } catch (error) {
-      Logger.error("加载历史记录失败", error);
-      const notification = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      notification.createLine({ text: "加载历史记录失败", type: "error" });
+      history = JSON.parse(historyJSON);
+    } catch (e) {
+      Logger.error("解析问答历史记录失败", e);
+      history = [];
+    }
+    
+    // 如果没有历史记录
+    if (history.length === 0) {
+      const notification = new ztoolkit.ProgressWindow("RAGFlow 历史记录");
+      notification.createLine({ text: "暂无问答历史记录", type: "default" });
       notification.show();
       notification.startCloseTimer(2000);
+      return;
     }
-  }
-
-    /**
-   * 创建历史管理对话框
-   */
-  public static createHistoryManagementDialog() {
-    Logger.info("创建历史管理对话框");
     
+    // 创建对话框
     const dialog = new ztoolkit.Dialog(2, 1)
+      // 标题
       .addCell(0, 0, {
         tag: "h3",
-        properties: { innerHTML: "RAGFlow 历史记录管理" },
+        properties: { innerHTML: "RAGFlow 问答历史记录" },
         styles: { 
           margin: "10px 0 20px 0", 
           color: "#2d2d2d",
           textAlign: "center"
         }
       })
+      // 历史记录列表
       .addCell(1, 0, {
         tag: "div",
-        styles: {
-          margin: "0 auto",
-          textAlign: "center",
-          padding: "20px"
+        styles: { 
+          overflowY: "auto", 
+          maxHeight: "500px",
+          padding: "0 5px"
         },
-        children: [
-          {
-            tag: "p",
-            properties: { textContent: "您可以清除所有历史记录。此操作不可撤销。" },
+        children: history.map((item: any, index: number) => {
+          const date = new Date(item.timestamp);
+          const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+          const hasSources = item.sources && item.sources.length > 0;
+          
+          return {
+            tag: "div",
             styles: {
               marginBottom: "20px",
-              color: "#666"
-            }
-          },
-          {
-            tag: "button",
-            namespace: "html",
-            id: "clear-history-button",
-            properties: { textContent: "清除所有历史记录" },
-            styles: {
-              padding: "8px 15px",
-              backgroundColor: "#f56565",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer"
-            }
-          }
-        ]
+              padding: "15px",
+              backgroundColor: index % 2 === 0 ? "#f8f9fa" : "#fff",
+              borderRadius: "6px",
+              border: "1px solid #eee"
+            },
+            children: [
+              // 时间戳
+              {
+                tag: "div",
+                styles: {
+                  fontSize: "0.8em",
+                  color: "#888",
+                  marginBottom: "8px"
+                },
+                properties: { textContent: formattedDate }
+              },
+              // 问题
+              {
+                tag: "div",
+                styles: {
+                  marginBottom: "10px"
+                },
+                children: [
+                  {
+                    tag: "span",
+                    styles: {
+                      backgroundColor: "#4b6bfb",
+                      color: "white",
+                      padding: "2px 6px",
+                      borderRadius: "10px",
+                      marginRight: "8px",
+                      fontSize: "0.75em"
+                    },
+                    properties: { innerHTML: "问题" }
+                  },
+                  {
+                    tag: "span",
+                    styles: {
+                      fontWeight: "500"
+                    },
+                    properties: { textContent: item.question }
+                  }
+                ]
+              },
+              // 回答
+              {
+                tag: "div",
+                styles: {
+                  backgroundColor: "#f0fdf4",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  fontSize: "0.95em",
+                  border: "1px solid #d1fae5",
+                  marginBottom: hasSources ? "10px" : "0"
+                },
+                children: [
+                  {
+                    tag: "div",
+                    styles: {
+                      display: "flex",
+                      marginBottom: "5px"
+                    },
+                    children: [
+                      {
+                        tag: "span",
+                        styles: {
+                          backgroundColor: "#10b981",
+                          color: "white",
+                          padding: "2px 6px",
+                          borderRadius: "10px",
+                          marginRight: "8px",
+                          fontSize: "0.75em"
+                        },
+                        properties: { innerHTML: "回答" }
+                      }
+                    ]
+                  },
+                  {
+                    tag: "div",
+                    styles: {
+                      whiteSpace: "pre-wrap",
+                      maxHeight: "150px",
+                      overflowY: "auto"
+                    },
+                    properties: { textContent: item.answer }
+                  }
+                ]
+              },
+              // 来源信息 (如果有)
+              ...(hasSources ? [{
+                tag: "div",
+                styles: {
+                  marginTop: "10px",
+                  backgroundColor: "#fff7ed",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  fontSize: "0.9em",
+                  border: "1px solid #ffedd5",
+                  maxHeight: "100px",
+                  overflowY: "auto"
+                },
+                children: [
+                  {
+                    tag: "div",
+                    styles: {
+                      display: "flex",
+                      marginBottom: "5px"
+                    },
+                    children: [
+                      {
+                        tag: "span",
+                        styles: {
+                          backgroundColor: "#f97316",
+                          color: "white",
+                          padding: "2px 6px",
+                          borderRadius: "10px",
+                          marginRight: "8px",
+                          fontSize: "0.75em"
+                        },
+                        properties: { innerHTML: "来源" }
+                      },
+                      {
+                        tag: "span",
+                        styles: {
+                          fontSize: "0.8em",
+                          color: "#666"
+                        },
+                        properties: { textContent: `${item.sources.length} 个参考来源` }
+                      }
+                    ]
+                  },
+                  ...item.sources.slice(0, 2).map((source: any, sourceIdx: number) => ({
+                    tag: "div",
+                    styles: {
+                      fontSize: "0.8em",
+                      color: "#555",
+                      paddingLeft: "10px",
+                      borderLeft: "2px solid #ffedd5",
+                      marginTop: "5px"
+                    },
+                    properties: { textContent: `${source.document_name}` }
+                  })),
+                  ...(item.sources.length > 2 ? [{
+                    tag: "div",
+                    styles: {
+                      fontSize: "0.8em",
+                      color: "#888",
+                      marginTop: "5px",
+                      fontStyle: "italic"
+                    },
+                    properties: { textContent: `...还有 ${item.sources.length - 2} 个来源` }
+                  }] : [])
+                ]
+              }] : []),
+              // 操作按钮
+              {
+                tag: "div",
+                styles: {
+                  marginTop: "10px",
+                  textAlign: "right"
+                },
+                children: [
+                  {
+                    tag: "button",
+                    namespace: "html",
+                    attributes: {
+                      type: "button",
+                      "data-index": index.toString(),
+                      "class": "history-btn-copy"
+                    },
+                    styles: {
+                      padding: "3px 8px",
+                      marginRight: "8px",
+                      cursor: "pointer",
+                      backgroundColor: "#f0f0f0",
+                      border: "1px solid #ddd",
+                      borderRadius: "3px"
+                    },
+                    properties: { textContent: "复制回答" }
+                  },
+                  {
+                    tag: "button",
+                    namespace: "html",
+                    attributes: {
+                      type: "button",
+                      "data-index": index.toString(),
+                      "class": "history-btn-reask"
+                    },
+                    styles: {
+                      padding: "3px 8px",
+                      cursor: "pointer",
+                      backgroundColor: "#4b6bfb",
+                      border: "1px solid #4b6bfb",
+                      borderRadius: "3px",
+                      color: "white"
+                    },
+                    properties: { textContent: "再次提问" }
+                  }
+                ]
+              }
+            ]
+          };
+        })
       })
+      // 添加按钮
       .addButton("关闭", "close")
       .setDialogData({
         loadCallback: () => {
-          // 为清除按钮添加点击事件
-          const clearButton = dialog.window.document.getElementById("clear-history-button");
-          if (clearButton) {
-            clearButton.addEventListener("click", async () => {
-              // 二次确认
-              const confirmResult = dialog.window.confirm("确定要清除所有历史记录吗？此操作不可撤销。");
-              if (confirmResult) {
-                try {
-                  await StorageManager.clearQuestionAnswerHistory();
-                  
-                  const notification = new ztoolkit.ProgressWindow("RAGFlow");
-                  notification.createLine({ text: "已清除所有历史记录", type: "success" });
-                  notification.show();
-                  notification.startCloseTimer(1500);
-                  
-                  // 关闭对话框
-                  dialog.window.close();
-                } catch (error) {
-                  Logger.error("清除历史记录失败", error);
-                  
-                  const notification = new ztoolkit.ProgressWindow("RAGFlow 错误");
-                  notification.createLine({ text: "清除历史记录失败", type: "error" });
-                  notification.show();
-                  notification.startCloseTimer(2000);
-                }
-              }
+          // 为所有复制按钮添加事件
+          const copyButtons = dialog.window.document.querySelectorAll(".history-btn-copy");
+          copyButtons.forEach((button) => {
+            button.addEventListener("click", (event) => {
+              const target = event.currentTarget as HTMLElement;
+              const index = parseInt(target.getAttribute("data-index") || "0");
+              Zotero.Utilities.Internal.copyTextToClipboard(history[index].answer);
+              const notification = new ztoolkit.ProgressWindow("RAGFlow");
+              notification.createLine({ text: "回答已复制到剪贴板", type: "success" });
+              notification.show();
+              notification.startCloseTimer(1500);
             });
-          }
+          });
+          
+          // 为所有再次提问按钮添加事件
+          const reaskButtons = dialog.window.document.querySelectorAll(".history-btn-reask");
+          reaskButtons.forEach((button) => {
+            button.addEventListener("click", (event) => {
+              const target = event.currentTarget as HTMLElement;
+              const index = parseInt(target.getAttribute("data-index") || "0");
+              dialog.window.close();
+              // 打开提问对话框并预填问题
+              setTimeout(() => {
+                const questionDialog = RAGFlowUI.createQuestionInputDialog();
+                if (questionDialog.dialogData) {
+                  questionDialog.dialogData.question = history[index].question;
+                  // 更新文本框中的值
+                  const textArea = questionDialog.window.document.getElementById("question-input");
+                  if (textArea) {
+                    (textArea as HTMLTextAreaElement).value = history[index].question;
+                  }
+                }
+              }, 100);
+            });
+          });
         }
       });
     
     // 打开对话框
-    dialog.open("RAGFlow 历史管理", {
-      width: 400,
-      height: 250,
+    dialog.open("RAGFlow 问答历史", {
+      width: 700,
+      height: 600,
       centerscreen: true,
-      resizable: false
+      resizable: true
     });
+    
+    return dialog;
   }
-
   /**
  * 创建知识库选择对话框
  */
@@ -1331,7 +1239,7 @@ export class RAGFlowUI {
     };
     
     // 使用单选按钮而非下拉框
-    const modelOptions = ["deepseek-resoner","deepseek-chat", "qwen-turbo", "qwen-max", "qwen-plus", "qwen-long"];
+    const modelOptions = ["deepseek-chat", "qwen-turbo", "qwen-max", "qwen-plus", "qwen-long"];
     
     // 初始化对话框
     const dialog = new ztoolkit.Dialog(8, 2);

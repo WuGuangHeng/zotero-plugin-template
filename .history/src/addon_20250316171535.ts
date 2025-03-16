@@ -738,45 +738,6 @@ class Addon {
   private generateAssistantName(kbName: string): string {
     return `Zotero-${kbName}-${new Date().toISOString().slice(0, 10)}`;
   }
-
-    /**
-   * 打开历史记录对话框
-   */
-  public async openHistoryDialog() {
-    try {
-      Logger.info("打开历史记录对话框");
-      
-      // 首先检查是否配置了API密钥 - 虽然不一定需要API密钥来查看历史记录，但保持一致性检查
-      const apiKey = Zotero.Prefs.get(`${config.prefsPrefix}.apiKey`, true) as string;
-      if (!apiKey) {
-        const progressWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 提示");
-        progressWindow.createLine({ 
-          text: "请先在设置中配置 RAGFlow API 密钥",
-          type: "warning"
-        });
-        progressWindow.show();
-        progressWindow.startCloseTimer(3000);
-        
-        // 打开设置页面
-        setTimeout(() => this.openSettings(), 1000);
-        return;
-      }
-      
-      // 调用 RAGFlowUI 中的 createHistoryDialog 方法
-      await RAGFlowUI.createHistoryDialog();
-    } catch (error) {
-      Logger.error("打开历史记录对话框失败", error);
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorWindow = new this.data.ztoolkit.ProgressWindow("RAGFlow 错误");
-      errorWindow.createLine({ 
-        text: `打开历史记录失败: ${errorMessage}`,
-        type: "error" 
-      });
-      errorWindow.show();
-      errorWindow.startCloseTimer(3000);
-    }
-  }
 }
 
 export default Addon;

@@ -2,7 +2,6 @@
 import { config } from "../../package.json";
 import { RAGFlowService, ChatAssistantParams } from "./ragflowService";
 import { Logger } from "./logger";
-import { StorageManager, ChatHistoryEntry } from "./storageManager";
 
 // 添加一个类型定义来支持字符串索引
 interface ChatSettings {
@@ -705,452 +704,361 @@ export class RAGFlowUI {
       resizable: true
     });
     
-    // 保存问答历史 - 使用异步调用，不等待完成
-    this.saveQuestionAnswerHistory(question, answer, sources).catch(e => {
-      Logger.error("保存历史失败", e);
-    });
+    // 保存问答历史
+    this.saveQuestionAnswerHistory(question, answer, sources);
     
     return dialog;
   }
   
   /**
-   * 保存问答历史
-   * @param question 问题文本
-   * @param answer 回答文本
-   * @param sources 可选的参考来源信息
-   */
-  private static async saveQuestionAnswerHistory(question: string, answer: string, sources?: Array<{content: string, document_name: string}>) {
+ * 保存问答历史
+ * @param question 问题文本
+ * @param answer 回答文本
+ * @param sources 可选的参考来源信息
+ */
+  private static saveQuestionAnswerHistory(question: string, answer: string, sources?: Array<{content: string, document_name: string}>) {
     try {
-      Logger.info("开始保存问答历史记录");
+      // 获取当前历史记录
+      const historyJSON = Zotero.Prefs.get(`${config.prefsPrefix}.qaHistory`, true) as string || "[]";
+      let history = [];
+      try {
+        history = JSON.parse(historyJSON);
+      } catch (e) {
+        Logger.error("解析问答历史记录失败", e);
+        history = [];
+      }
       
-      // 使用StorageManager保存历史记录，替代原来的Zotero.Prefs
-      await StorageManager.saveQuestionAnswerHistory(question, answer, sources);
+      // 添加新的记录
+      history.unshift({
+        question,
+        answer,
+        sources: sources || [],
+        timestamp: new Date().toISOString()
+      });
       
+      // 限制历史记录数量（保留最近50条）
+      if (history.length > 50) {
+        history = history.slice(0, 50);
+      }
+      
+      // 保存回偏好设置
+      Zotero.Prefs.set(`${config.prefsPrefix}.qaHistory`, JSON.stringify(history), true);
       Logger.info("问答历史记录已保存");
-    } catch (error) {
-      Logger.error("保存问答历史记录失败", error);
+    } catch (e) {
+      Logger.error("保存问答历史记录失败", e);
     }
   }
   
   /**
-   * 创建问答历史对话框，使用文件系统存储替代Zotero Prefs
-   */
-  public static async createHistoryDialog() {
+ * 修改 createHistoryDialog 方法，添加来源信息显示
+ */
+  public static createHistoryDialog() {
     Logger.info("创建问答历史对话框");
     
+    // 获取历史记录
+    const historyJSON = Zotero.Prefs.get(`${config.prefsPrefix}.qaHistory`, true) as string || "[]";
+    let history = [];
     try {
-      // 显示加载中提示
-      const progressWindow = new ztoolkit.ProgressWindow("RAGFlow");
-      progressWindow.createLine({ text: "加载历史记录..." });
-      progressWindow.show();
-      
-      // 使用 StorageManager 获取历史记录
-      const history = await StorageManager.getQuestionAnswerHistory();
-      
-      // 关闭进度窗口
-      progressWindow.close();
-      
-      // 如果没有历史记录
-      if (history.length === 0) {
-        const notification = new ztoolkit.ProgressWindow("RAGFlow 历史记录");
-        notification.createLine({ text: "暂无问答历史记录", type: "default" });
-        notification.show();
-        notification.startCloseTimer(2000);
-        return;
-      }
-      
-      // 创建对话框
-      const dialog = new ztoolkit.Dialog(2, 1)
-        // 标题
-        .addCell(0, 0, {
-          tag: "h3",
-          properties: { innerHTML: "RAGFlow 问答历史记录" },
-          styles: { 
-            margin: "10px 0 20px 0", 
-            color: "#2d2d2d",
-            textAlign: "center"
-          }
-        })
-        // 历史记录列表
-        .addCell(1, 0, {
-          tag: "div",
-          styles: { 
-            overflowY: "auto", 
-            maxHeight: "500px",
-            padding: "0 5px"
-          },
-          children: history.map((item: ChatHistoryEntry, index: number) => {
-            const date = new Date(item.timestamp);
-            const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            const hasSources = item.sources && item.sources.length > 0;
-            
-            return {
-              tag: "div",
-              styles: {
-                marginBottom: "20px",
-                padding: "15px",
-                backgroundColor: index % 2 === 0 ? "#f8f9fa" : "#fff",
-                borderRadius: "6px",
-                border: "1px solid #eee"
-              },
-              children: [
-                // 时间戳
-                {
-                  tag: "div",
-                  styles: {
-                    fontSize: "0.8em",
-                    color: "#888",
-                    marginBottom: "8px"
-                  },
-                  properties: { textContent: formattedDate }
-                },
-                // 问题
-                {
-                  tag: "div",
-                  styles: {
-                    marginBottom: "10px"
-                  },
-                  children: [
-                    {
-                      tag: "span",
-                      styles: {
-                        backgroundColor: "#4b6bfb",
-                        color: "white",
-                        padding: "2px 6px",
-                        borderRadius: "10px",
-                        marginRight: "8px",
-                        fontSize: "0.75em"
-                      },
-                      properties: { innerHTML: "问题" }
-                    },
-                    {
-                      tag: "span",
-                      styles: {
-                        fontWeight: "500"
-                      },
-                      properties: { textContent: item.question }
-                    }
-                  ]
-                },
-                // 回答
-                {
-                  tag: "div",
-                  styles: {
-                    backgroundColor: "#f0fdf4",
-                    padding: "10px",
-                    borderRadius: "4px",
-                    fontSize: "0.95em",
-                    border: "1px solid #d1fae5",
-                    marginBottom: hasSources ? "10px" : "0"
-                  },
-                  children: [
-                    {
-                      tag: "div",
-                      styles: {
-                        display: "flex",
-                        marginBottom: "5px"
-                      },
-                      children: [
-                        {
-                          tag: "span",
-                          styles: {
-                            backgroundColor: "#10b981",
-                            color: "white",
-                            padding: "2px 6px",
-                            borderRadius: "10px",
-                            marginRight: "8px",
-                            fontSize: "0.75em"
-                          },
-                          properties: { innerHTML: "回答" }
-                        }
-                      ]
-                    },
-                    {
-                      tag: "div",
-                      styles: {
-                        whiteSpace: "pre-wrap",
-                        maxHeight: "150px",
-                        overflowY: "auto"
-                      },
-                      properties: { textContent: item.answer }
-                    }
-                  ]
-                },
-                // 来源信息 (如果有)
-                ...(hasSources ? [{
-                  tag: "div",
-                  styles: {
-                    marginTop: "10px",
-                    backgroundColor: "#fff7ed",
-                    padding: "10px",
-                    borderRadius: "4px",
-                    fontSize: "0.9em",
-                    border: "1px solid #ffedd5",
-                    maxHeight: "100px",
-                    overflowY: "auto"
-                  },
-                  children: [
-                    {
-                      tag: "div",
-                      styles: {
-                        display: "flex",
-                        marginBottom: "5px"
-                      },
-                      children: [
-                        {
-                          tag: "span",
-                          styles: {
-                            backgroundColor: "#f97316",
-                            color: "white",
-                            padding: "2px 6px",
-                            borderRadius: "10px",
-                            marginRight: "8px",
-                            fontSize: "0.75em"
-                          },
-                          properties: { innerHTML: "来源" }
-                        },
-                        {
-                          tag: "span",
-                          styles: {
-                            fontSize: "0.8em",
-                            color: "#666"
-                          },
-                          properties: { textContent: `${item.sources.length} 个参考来源` }
-                        }
-                      ]
-                    },
-                    ...item.sources.slice(0, 2).map((source: any, sourceIdx: number) => ({
-                      tag: "div",
-                      styles: {
-                        fontSize: "0.8em",
-                        color: "#555",
-                        paddingLeft: "10px",
-                        borderLeft: "2px solid #ffedd5",
-                        marginTop: "5px"
-                      },
-                      properties: { textContent: `${source.document_name}` }
-                    })),
-                    ...(item.sources.length > 2 ? [{
-                      tag: "div",
-                      styles: {
-                        fontSize: "0.8em",
-                        color: "#888",
-                        marginTop: "5px",
-                        fontStyle: "italic"
-                      },
-                      properties: { textContent: `...还有 ${item.sources.length - 2} 个来源` }
-                    }] : [])
-                  ]
-                }] : []),
-                // 操作按钮
-                {
-                  tag: "div",
-                  styles: {
-                    marginTop: "10px",
-                    textAlign: "right"
-                  },
-                  children: [
-                    {
-                      tag: "button",
-                      namespace: "html",
-                      attributes: {
-                        type: "button",
-                        "data-index": index.toString(),
-                        "class": "history-btn-copy"
-                      },
-                      styles: {
-                        padding: "3px 8px",
-                        marginRight: "8px",
-                        cursor: "pointer",
-                        backgroundColor: "#f0f0f0",
-                        border: "1px solid #ddd",
-                        borderRadius: "3px"
-                      },
-                      properties: { textContent: "复制回答" }
-                    },
-                    {
-                      tag: "button",
-                      namespace: "html",
-                      attributes: {
-                        type: "button",
-                        "data-index": index.toString(),
-                        "class": "history-btn-reask"
-                      },
-                      styles: {
-                        padding: "3px 8px",
-                        cursor: "pointer",
-                        backgroundColor: "#4b6bfb",
-                        border: "1px solid #4b6bfb",
-                        borderRadius: "3px",
-                        color: "white"
-                      },
-                      properties: { textContent: "再次提问" }
-                    }
-                  ]
-                }
-              ]
-            };
-          })
-        })
-        // 添加管理按钮和关闭按钮
-        .addButton("管理历史", "manage")
-        .addButton("关闭", "close")
-        .setDialogData({
-          loadCallback: () => {
-            // 为所有复制按钮添加事件
-            const copyButtons = dialog.window.document.querySelectorAll(".history-btn-copy");
-            copyButtons.forEach((button) => {
-              button.addEventListener("click", (event) => {
-                const target = event.currentTarget as HTMLElement;
-                const index = parseInt(target.getAttribute("data-index") || "0");
-                Zotero.Utilities.Internal.copyTextToClipboard(history[index].answer);
-                const notification = new ztoolkit.ProgressWindow("RAGFlow");
-                notification.createLine({ text: "回答已复制到剪贴板", type: "success" });
-                notification.show();
-                notification.startCloseTimer(1500);
-              });
-            });
-            
-            // 为所有再次提问按钮添加事件
-            const reaskButtons = dialog.window.document.querySelectorAll(".history-btn-reask");
-            reaskButtons.forEach((button) => {
-              button.addEventListener("click", (event) => {
-                const target = event.currentTarget as HTMLElement;
-                const index = parseInt(target.getAttribute("data-index") || "0");
-                dialog.window.close();
-                // 打开提问对话框并预填问题
-                setTimeout(() => {
-                  const questionDialog = RAGFlowUI.createQuestionInputDialog();
-                  if (questionDialog.dialogData) {
-                    questionDialog.dialogData.question = history[index].question;
-                    // 更新文本框中的值
-                    const textArea = questionDialog.window.document.getElementById("question-input");
-                    if (textArea) {
-                      (textArea as HTMLTextAreaElement).value = history[index].question;
-                    }
-                  }
-                }, 100);
-              });
-            });
-          },
-          unloadCallback: () => {
-            // 处理管理按钮点击
-            if (dialog.dialogData._lastButtonId === "manage") {
-              // 打开历史管理对话框
-              setTimeout(() => RAGFlowUI.createHistoryManagementDialog(), 100);
-            }
-          }
-        });
-      
-      // 打开对话框
-      dialog.open("RAGFlow 问答历史", {
-        width: 700,
-        height: 600,
-        centerscreen: true,
-        resizable: true
-      });
-      
-      return dialog;
-    } catch (error) {
-      Logger.error("加载历史记录失败", error);
-      const notification = new ztoolkit.ProgressWindow("RAGFlow 错误");
-      notification.createLine({ text: "加载历史记录失败", type: "error" });
+      history = JSON.parse(historyJSON);
+    } catch (e) {
+      Logger.error("解析问答历史记录失败", e);
+      history = [];
+    }
+    
+    // 如果没有历史记录
+    if (history.length === 0) {
+      const notification = new ztoolkit.ProgressWindow("RAGFlow 历史记录");
+      notification.createLine({ text: "暂无问答历史记录", type: "default" });
       notification.show();
       notification.startCloseTimer(2000);
+      return;
     }
-  }
-
-    /**
-   * 创建历史管理对话框
-   */
-  public static createHistoryManagementDialog() {
-    Logger.info("创建历史管理对话框");
     
+    // 创建对话框
     const dialog = new ztoolkit.Dialog(2, 1)
+      // 标题
       .addCell(0, 0, {
         tag: "h3",
-        properties: { innerHTML: "RAGFlow 历史记录管理" },
+        properties: { innerHTML: "RAGFlow 问答历史记录" },
         styles: { 
           margin: "10px 0 20px 0", 
           color: "#2d2d2d",
           textAlign: "center"
         }
       })
+      // 历史记录列表
       .addCell(1, 0, {
         tag: "div",
-        styles: {
-          margin: "0 auto",
-          textAlign: "center",
-          padding: "20px"
+        styles: { 
+          overflowY: "auto", 
+          maxHeight: "500px",
+          padding: "0 5px"
         },
-        children: [
-          {
-            tag: "p",
-            properties: { textContent: "您可以清除所有历史记录。此操作不可撤销。" },
+        children: history.map((item: any, index: number) => {
+          const date = new Date(item.timestamp);
+          const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+          const hasSources = item.sources && item.sources.length > 0;
+          
+          return {
+            tag: "div",
             styles: {
               marginBottom: "20px",
-              color: "#666"
-            }
-          },
-          {
-            tag: "button",
-            namespace: "html",
-            id: "clear-history-button",
-            properties: { textContent: "清除所有历史记录" },
-            styles: {
-              padding: "8px 15px",
-              backgroundColor: "#f56565",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer"
-            }
-          }
-        ]
+              padding: "15px",
+              backgroundColor: index % 2 === 0 ? "#f8f9fa" : "#fff",
+              borderRadius: "6px",
+              border: "1px solid #eee"
+            },
+            children: [
+              // 时间戳
+              {
+                tag: "div",
+                styles: {
+                  fontSize: "0.8em",
+                  color: "#888",
+                  marginBottom: "8px"
+                },
+                properties: { textContent: formattedDate }
+              },
+              // 问题
+              {
+                tag: "div",
+                styles: {
+                  marginBottom: "10px"
+                },
+                children: [
+                  {
+                    tag: "span",
+                    styles: {
+                      backgroundColor: "#4b6bfb",
+                      color: "white",
+                      padding: "2px 6px",
+                      borderRadius: "10px",
+                      marginRight: "8px",
+                      fontSize: "0.75em"
+                    },
+                    properties: { innerHTML: "问题" }
+                  },
+                  {
+                    tag: "span",
+                    styles: {
+                      fontWeight: "500"
+                    },
+                    properties: { textContent: item.question }
+                  }
+                ]
+              },
+              // 回答
+              {
+                tag: "div",
+                styles: {
+                  backgroundColor: "#f0fdf4",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  fontSize: "0.95em",
+                  border: "1px solid #d1fae5",
+                  marginBottom: hasSources ? "10px" : "0"
+                },
+                children: [
+                  {
+                    tag: "div",
+                    styles: {
+                      display: "flex",
+                      marginBottom: "5px"
+                    },
+                    children: [
+                      {
+                        tag: "span",
+                        styles: {
+                          backgroundColor: "#10b981",
+                          color: "white",
+                          padding: "2px 6px",
+                          borderRadius: "10px",
+                          marginRight: "8px",
+                          fontSize: "0.75em"
+                        },
+                        properties: { innerHTML: "回答" }
+                      }
+                    ]
+                  },
+                  {
+                    tag: "div",
+                    styles: {
+                      whiteSpace: "pre-wrap",
+                      maxHeight: "150px",
+                      overflowY: "auto"
+                    },
+                    properties: { textContent: item.answer }
+                  }
+                ]
+              },
+              // 来源信息 (如果有)
+              ...(hasSources ? [{
+                tag: "div",
+                styles: {
+                  marginTop: "10px",
+                  backgroundColor: "#fff7ed",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  fontSize: "0.9em",
+                  border: "1px solid #ffedd5",
+                  maxHeight: "100px",
+                  overflowY: "auto"
+                },
+                children: [
+                  {
+                    tag: "div",
+                    styles: {
+                      display: "flex",
+                      marginBottom: "5px"
+                    },
+                    children: [
+                      {
+                        tag: "span",
+                        styles: {
+                          backgroundColor: "#f97316",
+                          color: "white",
+                          padding: "2px 6px",
+                          borderRadius: "10px",
+                          marginRight: "8px",
+                          fontSize: "0.75em"
+                        },
+                        properties: { innerHTML: "来源" }
+                      },
+                      {
+                        tag: "span",
+                        styles: {
+                          fontSize: "0.8em",
+                          color: "#666"
+                        },
+                        properties: { textContent: `${item.sources.length} 个参考来源` }
+                      }
+                    ]
+                  },
+                  ...item.sources.slice(0, 2).map((source: any, sourceIdx: number) => ({
+                    tag: "div",
+                    styles: {
+                      fontSize: "0.8em",
+                      color: "#555",
+                      paddingLeft: "10px",
+                      borderLeft: "2px solid #ffedd5",
+                      marginTop: "5px"
+                    },
+                    properties: { textContent: `${source.document_name}` }
+                  })),
+                  ...(item.sources.length > 2 ? [{
+                    tag: "div",
+                    styles: {
+                      fontSize: "0.8em",
+                      color: "#888",
+                      marginTop: "5px",
+                      fontStyle: "italic"
+                    },
+                    properties: { textContent: `...还有 ${item.sources.length - 2} 个来源` }
+                  }] : [])
+                ]
+              }] : []),
+              // 操作按钮
+              {
+                tag: "div",
+                styles: {
+                  marginTop: "10px",
+                  textAlign: "right"
+                },
+                children: [
+                  {
+                    tag: "button",
+                    namespace: "html",
+                    attributes: {
+                      type: "button",
+                      "data-index": index.toString(),
+                      "class": "history-btn-copy"
+                    },
+                    styles: {
+                      padding: "3px 8px",
+                      marginRight: "8px",
+                      cursor: "pointer",
+                      backgroundColor: "#f0f0f0",
+                      border: "1px solid #ddd",
+                      borderRadius: "3px"
+                    },
+                    properties: { textContent: "复制回答" }
+                  },
+                  {
+                    tag: "button",
+                    namespace: "html",
+                    attributes: {
+                      type: "button",
+                      "data-index": index.toString(),
+                      "class": "history-btn-reask"
+                    },
+                    styles: {
+                      padding: "3px 8px",
+                      cursor: "pointer",
+                      backgroundColor: "#4b6bfb",
+                      border: "1px solid #4b6bfb",
+                      borderRadius: "3px",
+                      color: "white"
+                    },
+                    properties: { textContent: "再次提问" }
+                  }
+                ]
+              }
+            ]
+          };
+        })
       })
+      // 添加按钮
       .addButton("关闭", "close")
       .setDialogData({
         loadCallback: () => {
-          // 为清除按钮添加点击事件
-          const clearButton = dialog.window.document.getElementById("clear-history-button");
-          if (clearButton) {
-            clearButton.addEventListener("click", async () => {
-              // 二次确认
-              const confirmResult = dialog.window.confirm("确定要清除所有历史记录吗？此操作不可撤销。");
-              if (confirmResult) {
-                try {
-                  await StorageManager.clearQuestionAnswerHistory();
-                  
-                  const notification = new ztoolkit.ProgressWindow("RAGFlow");
-                  notification.createLine({ text: "已清除所有历史记录", type: "success" });
-                  notification.show();
-                  notification.startCloseTimer(1500);
-                  
-                  // 关闭对话框
-                  dialog.window.close();
-                } catch (error) {
-                  Logger.error("清除历史记录失败", error);
-                  
-                  const notification = new ztoolkit.ProgressWindow("RAGFlow 错误");
-                  notification.createLine({ text: "清除历史记录失败", type: "error" });
-                  notification.show();
-                  notification.startCloseTimer(2000);
-                }
-              }
+          // 为所有复制按钮添加事件
+          const copyButtons = dialog.window.document.querySelectorAll(".history-btn-copy");
+          copyButtons.forEach((button) => {
+            button.addEventListener("click", (event) => {
+              const target = event.currentTarget as HTMLElement;
+              const index = parseInt(target.getAttribute("data-index") || "0");
+              Zotero.Utilities.Internal.copyTextToClipboard(history[index].answer);
+              const notification = new ztoolkit.ProgressWindow("RAGFlow");
+              notification.createLine({ text: "回答已复制到剪贴板", type: "success" });
+              notification.show();
+              notification.startCloseTimer(1500);
             });
-          }
+          });
+          
+          // 为所有再次提问按钮添加事件
+          const reaskButtons = dialog.window.document.querySelectorAll(".history-btn-reask");
+          reaskButtons.forEach((button) => {
+            button.addEventListener("click", (event) => {
+              const target = event.currentTarget as HTMLElement;
+              const index = parseInt(target.getAttribute("data-index") || "0");
+              dialog.window.close();
+              // 打开提问对话框并预填问题
+              setTimeout(() => {
+                const questionDialog = RAGFlowUI.createQuestionInputDialog();
+                if (questionDialog.dialogData) {
+                  questionDialog.dialogData.question = history[index].question;
+                  // 更新文本框中的值
+                  const textArea = questionDialog.window.document.getElementById("question-input");
+                  if (textArea) {
+                    (textArea as HTMLTextAreaElement).value = history[index].question;
+                  }
+                }
+              }, 100);
+            });
+          });
         }
       });
     
     // 打开对话框
-    dialog.open("RAGFlow 历史管理", {
-      width: 400,
-      height: 250,
+    dialog.open("RAGFlow 问答历史", {
+      width: 700,
+      height: 600,
       centerscreen: true,
-      resizable: false
+      resizable: true
     });
+    
+    return dialog;
   }
-
   /**
  * 创建知识库选择对话框
  */
@@ -1314,7 +1222,7 @@ export class RAGFlowUI {
    * @param callback 回调函数，用于返回用户设置的参数
    * @param existingChatId 可选，现有聊天助手ID，传入时表示这是一个更新操作
    */
-   public static createChatAssistantSettingsDialog(datasetId: string, callback: (params: ChatAssistantParams) => void, existingChatId?: string): void {
+  public static createChatAssistantSettingsDialog(datasetId: string, callback: (params: ChatAssistantParams) => void, existingChatId?: string): void {
     Logger.info("创建聊天助手参数设置对话框" + (existingChatId ? "（更新模式）" : "（新建模式）"));
     
     // 对话框标题
@@ -1330,11 +1238,8 @@ export class RAGFlowUI {
       top_n: 5
     };
     
-    // 使用单选按钮而非下拉框
-    const modelOptions = ["deepseek-resoner","deepseek-chat", "qwen-turbo", "qwen-max", "qwen-plus", "qwen-long"];
-    
     // 初始化对话框
-    const dialog = new ztoolkit.Dialog(8, 2);
+    const dialog = new ztoolkit.Dialog(9, 2);
     
     // 添加标题
     dialog.addCell(0, 0, {
@@ -1365,8 +1270,22 @@ export class RAGFlowUI {
       }
     });
     
-    // 模型选择 - 使用单选按钮
+    // 添加隐藏字段存储当前选择的模型
     dialog.addCell(2, 0, {
+      tag: "input",
+      namespace: "html",
+      id: "hidden-model-value",
+      attributes: {
+        type: "hidden",
+        value: defaultSettings.model
+      },
+      styles: {
+        display: "none"
+      }
+    });
+    
+    // 模型选择 - 使用原生 XUL 菜单按钮
+    dialog.addCell(3, 0, {
       tag: "label",
       properties: { textContent: "模型" },
       styles: { 
@@ -1377,52 +1296,59 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(2, 1, {
+    dialog.addCell(3, 1, {
       tag: "div",
-      id: "model-options",
       styles: {
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px"
+        width: "100%",
+        position: "relative"
       },
-      children: modelOptions.map(model => ({
-        tag: "div",
-        styles: {
-          display: "flex",
-          alignItems: "center",
-          marginBottom: "5px"
-        },
-        children: [
-          {
-            tag: "input",
-            namespace: "html",
-            id: `model-${model}`,
-            attributes: {
-              type: "radio",
-              name: "model-choice",
-              value: model,
-              checked: model === defaultSettings.model ? "checked" : undefined
-            },
-            styles: {
-              marginRight: "8px"
-            }
+      children: [
+        {
+          tag: "select",
+          namespace: "html",
+          id: "model-selector",
+          styles: {
+            width: "100%", 
+            padding: "6px",
+            borderRadius: "4px",
+            border: "1px solid #ccc"
           },
-          {
-            tag: "label",
-            attributes: {
-              for: `model-${model}`
+          children: [
+            {
+              tag: "option",
+              namespace: "html",
+              attributes: { value: "deepseek-chat" },
+              properties: { textContent: "deepseek-chat" }
             },
-            properties: { textContent: model },
-            styles: {
-              userSelect: "none"
+            {
+              tag: "option",
+              namespace: "html",
+              attributes: { value: "qwen-turbo" },
+              properties: { textContent: "qwen-turbo" }
+            },
+            {
+              tag: "option",
+              namespace: "html",
+              attributes: { value: "qwen-max" },
+              properties: { textContent: "qwen-max" }
             }
+          ]
+        },
+        // 显示当前选择的模型值（调试用）
+        {
+          tag: "div",
+          id: "model-display",
+          styles: {
+            fontSize: "0.8em",
+            color: "#666",
+            marginTop: "2px"
           }
-        ]
-      }))
+        }
+      ]
     });
     
     // 温度参数
-    dialog.addCell(3, 0, {
+    dialog.addCell(4, 0, {
       tag: "label",
       properties: { textContent: "温度" },
       styles: { 
@@ -1433,7 +1359,7 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(3, 1, {
+    dialog.addCell(4, 1, {
       tag: "input",
       namespace: "html",
       id: "temperature",
@@ -1453,7 +1379,7 @@ export class RAGFlowUI {
     });
     
     // Top P
-    dialog.addCell(4, 0, {
+    dialog.addCell(5, 0, {
       tag: "label",
       properties: { textContent: "Top P" },
       styles: { 
@@ -1464,7 +1390,7 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(4, 1, {
+    dialog.addCell(5, 1, {
       tag: "input",
       namespace: "html",
       id: "top_p",
@@ -1484,7 +1410,7 @@ export class RAGFlowUI {
     });
     
     // 最大输出长度
-    dialog.addCell(5, 0, {
+    dialog.addCell(6, 0, {
       tag: "label",
       properties: { textContent: "最大输出长度" },
       styles: { 
@@ -1495,7 +1421,7 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(5, 1, {
+    dialog.addCell(6, 1, {
       tag: "input",
       namespace: "html",
       id: "max_tokens",
@@ -1515,7 +1441,7 @@ export class RAGFlowUI {
     });
     
     // 相似度阈值
-    dialog.addCell(6, 0, {
+    dialog.addCell(7, 0, {
       tag: "label",
       properties: { textContent: "相似度阈值" },
       styles: { 
@@ -1526,7 +1452,7 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(6, 1, {
+    dialog.addCell(7, 1, {
       tag: "input",
       namespace: "html",
       id: "similarity_threshold",
@@ -1546,7 +1472,7 @@ export class RAGFlowUI {
     });
     
     // 检索结果数量
-    dialog.addCell(7, 0, {
+    dialog.addCell(8, 0, {
       tag: "label",
       properties: { textContent: "检索结果数量" },
       styles: { 
@@ -1557,7 +1483,7 @@ export class RAGFlowUI {
       }
     });
     
-    dialog.addCell(7, 1, {
+    dialog.addCell(8, 1, {
       tag: "input",
       namespace: "html",
       id: "top_n",
@@ -1582,8 +1508,84 @@ export class RAGFlowUI {
     
     // 设置对话框数据和回调函数
     dialog.setDialogData({
-      // 加载回调
+      // 存储真正的模型选择值
+      currentModel: defaultSettings.model,
+      
       loadCallback: async () => {
+        // 处理模型选择器的核心逻辑
+        const setupModelSelector = () => {
+          const modelSelector = dialog.window.document.getElementById("model-selector") as HTMLSelectElement;
+          const hiddenInput = dialog.window.document.getElementById("hidden-model-value") as HTMLInputElement;
+          const modelDisplay = dialog.window.document.getElementById("model-display");
+          
+          if (!modelSelector || !hiddenInput) return;
+          
+          // 初始化显示当前选择的模型
+          modelSelector.value = dialog.dialogData.currentModel;
+          hiddenInput.value = dialog.dialogData.currentModel;
+          
+          if (modelDisplay) {
+            modelDisplay.textContent = `当前选择: ${dialog.dialogData.currentModel}`;
+          }
+          
+          // 核心事件监听 - 多种事件类型确保捕获变更
+          const updateModelValue = () => {
+            const newValue = modelSelector.value;
+            dialog.dialogData.currentModel = newValue;
+            hiddenInput.value = newValue;
+            
+            if (modelDisplay) {
+              modelDisplay.textContent = `当前选择: ${newValue}`;
+            }
+            
+            Logger.debug(`模型选择已更新为: ${newValue}`);
+          };
+          
+          // 添加多种事件监听，确保在各种环境下都能捕获变化
+          ["change", "input"].forEach(eventType => {
+            modelSelector.addEventListener(eventType, updateModelValue);
+          });
+          
+          // 使用 MutationObserver 监听元素属性变化
+          const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+              if (mutation.type === "attributes" && mutation.attributeName === "value") {
+                updateModelValue();
+              }
+            }
+          });
+          
+          observer.observe(modelSelector, { attributes: true });
+          
+          // 额外处理方式：定期检查值是否变化
+          let lastKnownValue = modelSelector.value;
+          setInterval(() => {
+            if (modelSelector.value !== lastKnownValue) {
+              lastKnownValue = modelSelector.value;
+              updateModelValue();
+            }
+          }, 1000);
+        };
+        
+        // 为所有数值输入添加统一的事件监听器
+        const setupNumberInputs = () => {
+          ["temperature", "top_p", "max_tokens", "similarity_threshold", "top_n"].forEach(id => {
+            const input = dialog.window.document.getElementById(id) as HTMLInputElement;
+            if (input) {
+              input.addEventListener("input", () => {
+                const numValue = parseFloat(input.value);
+                if (!isNaN(numValue)) {
+                  Logger.debug(`${id} 已更新为: ${numValue}`);
+                }
+              });
+            }
+          });
+        };
+        
+        // 初始化界面处理
+        setupModelSelector();
+        setupNumberInputs();
+        
         // 如果是更新模式，获取远程设置
         if (existingChatId) {
           try {
@@ -1612,13 +1614,22 @@ export class RAGFlowUI {
             }
             
             if (assistant && assistant.llm) {
-              // 更新模型选择
-              if (assistant.llm.model_name) {
-                const modelRadio = dialog.window.document.getElementById(`model-${assistant.llm.model_name}`) as HTMLInputElement;
-                if (modelRadio) {
-                  modelRadio.checked = true;
+              // 更新模型选择器
+              const modelSelector = dialog.window.document.getElementById("model-selector") as HTMLSelectElement;
+              const hiddenInput = dialog.window.document.getElementById("hidden-model-value") as HTMLInputElement;
+              const modelDisplay = dialog.window.document.getElementById("model-display");
+              
+              if (modelSelector && assistant.llm.model_name) {
+                modelSelector.value = assistant.llm.model_name;
+                dialog.dialogData.currentModel = assistant.llm.model_name;
+                
+                if (hiddenInput) {
+                  hiddenInput.value = assistant.llm.model_name;
                 }
-                Logger.debug(`从远程加载模型设置: ${assistant.llm.model_name}`);
+                
+                if (modelDisplay) {
+                  modelDisplay.textContent = `当前选择: ${assistant.llm.model_name}`;
+                }
               }
               
               // 更新其他参数
@@ -1668,21 +1679,27 @@ export class RAGFlowUI {
           Logger.info("保存聊天助手参数设置");
           
           try {
-            // 获取选中的模型值 - 通过检查哪个单选按钮被选中
-            let selectedModel = defaultSettings.model;
-            for (const model of modelOptions) {
-              const radioElement = dialog.window.document.getElementById(`model-${model}`) as HTMLInputElement;
-              if (radioElement && radioElement.checked) {
-                selectedModel = model;
-                break;
-              }
-            }
-            
-            // 从DOM元素获取其他参数值
-            const getValue = (id: string, defaultValue: string = ""): string => {
+            // 直接从DOM元素获取所有当前值
+            const getValue = (id: string, defaultValue: any = "") => {
               const element = dialog.window.document.getElementById(id) as HTMLInputElement;
               return element ? element.value : defaultValue;
             };
+            
+            // 首先尝试从隐藏字段获取模型值
+            let modelValue = getValue("hidden-model-value", defaultSettings.model);
+            
+            // 如果隐藏字段没有值，则尝试从选择器获取
+            if (!modelValue) {
+              modelValue = getValue("model-selector", defaultSettings.model);
+            }
+            
+            // 如果仍然没有值，则尝试从dialogData获取
+            if (!modelValue) {
+              modelValue = dialog.dialogData.currentModel || defaultSettings.model;
+            }
+            
+            // 记录最终获取的模型值
+            Logger.debug(`最终使用的模型值: ${modelValue}`);
             
             // 验证数值参数
             const validateNumberParam = (value: string, min: number, max: number, defaultVal: number): number => {
@@ -1695,7 +1712,7 @@ export class RAGFlowUI {
             
             // 构造参数对象
             const params: ChatAssistantParams = {
-              model: selectedModel,
+              model: modelValue,
               temperature: validateNumberParam(getValue("temperature"), 0, 1, defaultSettings.temperature),
               top_p: validateNumberParam(getValue("top_p"), 0, 1, defaultSettings.top_p),
               max_tokens: validateNumberParam(getValue("max_tokens"), 100, 8000, defaultSettings.max_tokens),
@@ -1714,7 +1731,7 @@ export class RAGFlowUI {
             
             // 构造备用参数
             const fallbackParams: ChatAssistantParams = {
-              model: defaultSettings.model,
+              model: dialog.dialogData.currentModel || defaultSettings.model,
               temperature: defaultSettings.temperature,
               top_p: defaultSettings.top_p,
               max_tokens: defaultSettings.max_tokens,

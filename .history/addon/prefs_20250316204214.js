@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 pref("enable", true);
-pref("input", "This is input");
+// pref("input", "This is input");
 
 // 添加 RAGFlow 插件所需首选项
 pref("apiKey", "");
