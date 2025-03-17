@@ -235,4 +235,4 @@ flowchart TD
 
 ---
 
-*Zotero-RAGFlow: 让您的文献知识触手可及*
+*Zotero-RAGFlow: 让文献知识流动起来*

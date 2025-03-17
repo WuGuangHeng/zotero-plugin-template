@@ -8,6 +8,18 @@ yarn.lock
 
 # Scaffold
 .env
+.env.example
 .scaffold
 build
 logs
+
+# history
+.history
+
+# Docs
+docs
+ZoterAPI
+HTTP_API_RAGFlow.md 
+
+# vscode
+.vscode
