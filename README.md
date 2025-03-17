@@ -80,10 +80,10 @@ graph TD
     Addon --> RFUI[RAGFlowUI]
     Addon --> Logger[Logger]
     Addon --> Storage[StorageManager]
-    
+
     RFService <--> |API请求|RAGFlow[RAGFlow服务]
     Storage --> |存储|LocalFS[本地文件系统]
-    
+
     subgraph "Zotero插件"
         Addon
         RFService
@@ -102,7 +102,7 @@ sequenceDiagram
     participant Addon as 插件核心
     participant Service as RAGFlowService
     participant RAGFlow as RAGFlow服务
-    
+
     User->>UI: 选择集合并右键
     User->>UI: 点击"发送到RAGFlow知识库"
     UI->>Addon: 调用uploadCollectionToRAGFlow()
@@ -130,10 +130,10 @@ sequenceDiagram
     participant Service as RAGFlowService
     participant RAGFlow as RAGFlow服务
     participant Storage as StorageManager
-    
+
     User->>UI: 输入问题
     UI->>Addon: processQuestion(question)
-    
+
     alt 首次使用
         Addon->>UI: 打开聊天助手设置
         UI->>User: 显示设置界面
@@ -144,14 +144,14 @@ sequenceDiagram
         RAGFlow-->>Service: 返回聊天助手ID
         Addon->>Addon: 保存聊天助手映射
     end
-    
+
     alt 没有活动会话
         Addon->>Service: createSession()
         Service->>RAGFlow: API请求创建会话
         RAGFlow-->>Service: 返回会话ID
         Addon->>Addon: 保存会话ID
     end
-    
+
     Addon->>Service: askQuestion(question)
     Service->>RAGFlow: API请求提问
     RAGFlow->>RAGFlow: 检索相关文档并生成回答
@@ -169,16 +169,16 @@ flowchart TD
     A[用户查看历史] --> B{StorageManager获取历史}
     B -->|有历史记录| C[显示历史记录列表]
     B -->|无历史记录| D[显示无记录提示]
-    
+
     C --> E[用户操作]
     E --> F[复制回答]
     E --> G[再次提问]
     E --> H[管理历史]
-    
+
     H --> I{是否清除历史}
     I -->|是| J[清除所有历史]
     I -->|否| K[返回历史列表]
-    
+
     J --> L[显示清除成功]
 ```
 
@@ -196,6 +196,7 @@ flowchart TD
 ### 模型选项
 
 可用的大语言模型:
+
 - deepseek-resoner
 - deepseek-chat
 - qwen-turbo
@@ -235,4 +236,4 @@ flowchart TD
 
 ---
 
-*Zotero-RAGFlow: 让文献知识流动起来*
+_Zotero-RAGFlow: 让文献知识流动起来_

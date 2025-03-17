@@ -39,10 +39,13 @@ async function onMainWindowLoad(win: Window): Promise<void> {
   );
 
   // 显示启动通知
-  const progressWindow = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
-    closeOnClick: true,
-    closeTime: 3000,
-  })
+  const progressWindow = new ztoolkit.ProgressWindow(
+    addon.data.config.addonName,
+    {
+      closeOnClick: true,
+      closeTime: 3000,
+    },
+  )
     .createLine({
       text: getString("startup-finish"),
       type: "success",
@@ -60,11 +63,11 @@ async function onMainWindowUnload(win: Window): Promise<void> {
 async function onShutdown(): Promise<void> {
   // 释放资源，取消事件监听器等
   ztoolkit.log(`${config.addonName} shutdown`, config.addonName);
-  
+
   // 注销所有UI元素以避免内存泄漏
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
-  
+
   // 移除插件实例
   addon.data.alive = false;
   // @ts-ignore - Plugin instance is not typed
