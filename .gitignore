@@ -5,12 +5,17 @@
 node_modules
 pnpm-lock.yaml
 yarn.lock
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Scaffold
 .env
 .env.example
 .scaffold
 build
+dist
 logs
 
 # history
@@ -18,8 +23,17 @@ logs
 
 # Docs
 docs
-ZoterAPI
+ZoteroAPI
 HTTP_API_RAGFlow.md 
 
 # vscode
 .vscode
+.idea
+
+# Coverage directory
+coverage
+
+# Temporary files
+*.log
+*.tmp
+.cache
